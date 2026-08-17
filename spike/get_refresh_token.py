@@ -55,7 +55,7 @@ _PAGE = b"""<!doctype html><meta charset="utf-8">
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):  # noqa: N802
+    def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path != "/callback":
             self.send_error(404)

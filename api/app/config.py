@@ -8,14 +8,24 @@ signing key never leaves the process, and the client sees neither.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIN_SIGNING_KEY_CHARS = 32
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    """Resolved from the environment, falling back to api/.env.
+
+    The env file path is absolute on purpose. Relative to the working
+    directory it loads when uvicorn is started from `api/` and silently
+    resolves to nothing from anywhere else, which reads as "no config" rather
+    than as an error.
+    """
+
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
     google_client_id: str = ""
     google_client_secret: str = ""

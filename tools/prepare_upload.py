@@ -149,9 +149,7 @@ def transcode(source: Path, target: Path, crf: int) -> bool:
 
 def find_videos(root: Path) -> list[Path]:
     return sorted(
-        path
-        for path in root.rglob("*")
-        if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
+        path for path in root.rglob("*") if path.is_file() and path.suffix.lower() in VIDEO_SUFFIXES
     )
 
 
@@ -253,7 +251,7 @@ def main() -> int:
             "\nNext: drag the output folder into Google Drive, then find its id with"
             "\n  GET /drive/folders          (browse My Drive)"
             "\n  GET /drive/folders/{id}/preview   (see what a scan would write)"
-            "\n  POST /projects/{name}/scan  {\"driveFolderId\": \"...\"}"
+            '\n  POST /projects/{name}/scan  {"driveFolderId": "..."}'
         )
     return 1 if failed else 0
 
