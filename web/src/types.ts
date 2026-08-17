@@ -16,6 +16,7 @@ export type Lecture = {
 export type Project = {
   id: string;
   name: string;
+  orderIdx: number;
   source: "drive" | "youtube";
   driveFolderId?: string;
   youtubePlaylistId?: string;

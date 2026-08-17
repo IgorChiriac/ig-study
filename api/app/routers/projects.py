@@ -67,6 +67,9 @@ async def scan_project(
         project_fields["name"] = body.name
     elif not existing:
         project_fields["name"] = project_id
+    if not existing:
+        project_fields["source"] = "drive"
+        project_fields["orderIdx"] = store.new_project_order()
     await store.upsert_project(uid, project_id, project_fields)
     await usage_meter.record_scan(uid, len(lectures))
 

@@ -177,19 +177,20 @@ async def scan_playlist(
         for index, video in enumerate(videos)
     ]
 
+    existing = await store.get_project(uid, project_id)
     result = await store.apply_scan(uid, project_id, lectures)
-    await store.upsert_project(
-        uid,
-        project_id,
-        {
-            "source": "youtube",
-            "name": body.name or playlist.title,
-            "youtubePlaylistId": playlist.playlist_id,
-            "channelTitle": playlist.channel_title,
-            "reversed": body.reverse,
-            "lastScanAt": firestore.SERVER_TIMESTAMP,
-        },
-    )
+
+    project_fields: dict[str, Any] = {
+        "source": "youtube",
+        "name": body.name or playlist.title,
+        "youtubePlaylistId": playlist.playlist_id,
+        "channelTitle": playlist.channel_title,
+        "reversed": body.reverse,
+        "lastScanAt": firestore.SERVER_TIMESTAMP,
+    }
+    if not existing:
+        project_fields["orderIdx"] = store.new_project_order()
+    await store.upsert_project(uid, project_id, project_fields)
     await usage_meter.record_scan(uid, len(lectures))
 
     return {

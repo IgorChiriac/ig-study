@@ -11,7 +11,6 @@ import {
   NavLink,
   RingProgress,
   ScrollArea,
-  SimpleGrid,
   Stack,
   Tabs,
   Text,
@@ -33,12 +32,13 @@ import { Link, useOutletContext } from "react-router-dom";
 
 import { ApiError, listFolders, scanProject } from "../api";
 import { AddYouTube } from "../components/AddYouTube";
-import { watchLectures, watchProjects } from "../store";
+import { SortableCourses } from "../components/SortableCourses";
+import { saveProjectOrder, watchLectures, watchProjects } from "../store";
 import type { DriveFolder, Lecture, Project } from "../types";
 
 type Ctx = { uid: string };
 
-function ProjectCard({ uid, project }: { uid: string; project: Project }) {
+function CourseSummary({ uid, project }: { uid: string; project: Project }) {
   const [lectures, setLectures] = useState<Lecture[]>([]);
   useEffect(() => watchLectures(uid, project.id, setLectures), [uid, project.id]);
 
@@ -49,7 +49,10 @@ function ProjectCard({ uid, project }: { uid: string; project: Project }) {
   );
 
   return (
-    <Card component={Link} to={`/c/${project.id}`} withBorder padding="lg" radius="md">
+    <Link
+      to={`/c/${project.id}`}
+      style={{ textDecoration: "none", color: "inherit", display: "block" }}
+    >
       <Group wrap="nowrap" align="center">
         <RingProgress
           size={72}
@@ -83,7 +86,7 @@ function ProjectCard({ uid, project }: { uid: string; project: Project }) {
           )}
         </Stack>
       </Group>
-    </Card>
+    </Link>
   );
 }
 
@@ -232,11 +235,20 @@ export function Projects() {
           </Stack>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          {projects.map((project) => (
-            <ProjectCard key={project.id} uid={uid} project={project} />
-          ))}
-        </SimpleGrid>
+        <Stack gap="sm">
+          <SortableCourses
+            projects={projects}
+            onReorder={(ids) => void saveProjectOrder(uid, ids)}
+            renderCourse={(project) => (
+              <CourseSummary uid={uid} project={project} />
+            )}
+          />
+          {projects.length > 1 && (
+            <Text size="xs" c="dimmed" ta="center">
+              Drag the handle to reorder. On a phone, press and hold it first.
+            </Text>
+          )}
+        </Stack>
       )}
 
       <Modal opened={opened} onClose={close} title="Add a course" centered size="lg">

@@ -10,6 +10,7 @@ caller proved, never from anything in a request body.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -105,6 +106,17 @@ async def get_project(uid: str, project_id: str) -> dict[str, Any] | None:
 
 async def upsert_project(uid: str, project_id: str, fields: dict[str, Any]) -> None:
     await project_ref(uid, project_id).set(fields, merge=True)
+
+
+def new_project_order() -> int:
+    """An ordering value for a course being created.
+
+    Epoch seconds, so a new course appends rather than landing arbitrarily
+    among courses the user has already arranged. Dragging rewrites the whole
+    list to 0..n-1, and the two schemes coexist because only relative order
+    matters. Ordering is the user's, so it is never written on a re-scan.
+    """
+    return int(time.time())
 
 
 async def apply_scan(uid: str, project_id: str, lectures: list[Lecture]) -> ScanResult:

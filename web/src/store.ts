@@ -6,6 +6,7 @@ import {
   query,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Lecture, Module, Project } from "./types";
@@ -22,19 +23,40 @@ import type { Lecture, Module, Project } from "./types";
 const lecturesPath = (uid: string, projectId: string) =>
   collection(db, "users", uid, "projects", projectId, "lectures");
 
+/**
+ * Courses in the order the user arranged them.
+ *
+ * A course created by a scan gets an epoch-second `orderIdx`, so new ones
+ * append rather than landing arbitrarily. The first drag rewrites everything
+ * to 0..n-1; the two schemes coexist because only relative order matters.
+ */
 export function watchProjects(uid: string, onChange: (projects: Project[]) => void) {
   return onSnapshot(collection(db, "users", uid, "projects"), (snapshot) => {
-    onChange(
-      snapshot.docs.map((entry) => ({
-        id: entry.id,
-        name: (entry.data().name as string) ?? entry.id,
-        source: ((entry.data().source as string) ?? "drive") as "drive" | "youtube",
-        driveFolderId: entry.data().driveFolderId as string | undefined,
-        youtubePlaylistId: entry.data().youtubePlaylistId as string | undefined,
-        channelTitle: entry.data().channelTitle as string | undefined,
-      })),
+    const projects = snapshot.docs.map((entry) => ({
+      id: entry.id,
+      name: (entry.data().name as string) ?? entry.id,
+      orderIdx: (entry.data().orderIdx as number | undefined) ?? Number.MAX_SAFE_INTEGER,
+      source: ((entry.data().source as string) ?? "drive") as "drive" | "youtube",
+      driveFolderId: entry.data().driveFolderId as string | undefined,
+      youtubePlaylistId: entry.data().youtubePlaylistId as string | undefined,
+      channelTitle: entry.data().channelTitle as string | undefined,
+    }));
+
+    projects.sort(
+      (left, right) =>
+        left.orderIdx - right.orderIdx || left.name.localeCompare(right.name),
     );
+    onChange(projects);
   });
+}
+
+/** Persist a new course order. One batch, so the list never renders half-sorted. */
+export function saveProjectOrder(uid: string, orderedIds: string[]) {
+  const batch = writeBatch(db);
+  orderedIds.forEach((projectId, index) => {
+    batch.set(doc(db, "users", uid, "projects", projectId), { orderIdx: index }, { merge: true });
+  });
+  return batch.commit();
 }
 
 export function watchLectures(
