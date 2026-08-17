@@ -35,3 +35,6 @@ firebase-debug.log
 tmp/
 *.mp4
 *.mkv
+
+# api
+api/.venv/
