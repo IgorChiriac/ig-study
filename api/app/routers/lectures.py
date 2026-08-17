@@ -22,8 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import drive, store
-from app.auth import current_uid, sign_stream_token, verify_stream_token
+from app import drive, store, usage
+from app.auth import current_uid, sign_stream_token, stream_token_uid, verify_stream_token
 
 router = APIRouter(prefix="/lectures", tags=["lectures"])
 
@@ -53,7 +53,7 @@ async def stream_url(
     if project_id is None:
         raise HTTPException(404, "No such lecture for this user")
 
-    token, expires_at = sign_stream_token(lecture_id)
+    token, expires_at = sign_stream_token(lecture_id, uid)
     path = f"/lectures/{lecture_id}/stream.mp4?t={token}"
     return StreamUrl(
         path=path,
@@ -99,11 +99,16 @@ async def stream_video(
     headers["content-type"] = "video/mp4"
     headers["cache-control"] = _STREAM_CACHE_CONTROL
 
+    owner = stream_token_uid(request.query_params.get("t", ""))
+
     async def body():
+        sent = 0
         try:
             async for chunk in upstream.aiter_bytes(drive.CHUNK):
+                sent += len(chunk)
                 yield chunk
         finally:
             await upstream.aclose()
+            await usage.record_stream(owner, sent)
 
     return StreamingResponse(body(), status_code=upstream.status_code, headers=headers)

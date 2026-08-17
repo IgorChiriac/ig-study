@@ -71,6 +71,7 @@ async def generate(
 
     project = await store.get_project(uid, body.project_id)
     drafted = await claude.generate_cards(
+        uid,
         course=str((project or {}).get("name", body.project_id)),
         module=str(lecture.get("module", "")),
         title=str(lecture.get("title", "")),
@@ -124,7 +125,7 @@ async def answer(
     if card is None:
         raise HTTPException(404, "No such card")
 
-    grade = await claude.grade_answer(card.question, card.answer, body.text)
+    grade = await claude.grade_answer(uid, card.question, card.answer, body.text)
     state, next_due = apply_sm2(card.state, grade.score, cards_store.today_local())
     await cards_store.record_review(uid, card, state, next_due, grade.score)
 

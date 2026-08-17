@@ -13,6 +13,7 @@ from app import drive
 from app.config import settings
 from app.routers import cards, lectures, projects
 from app.routers import drive as drive_router
+from app.routers import usage as usage_router
 
 log = logging.getLogger("ig-study")
 
@@ -40,6 +41,7 @@ app.include_router(drive_router.router)
 app.include_router(cards.router)
 app.include_router(lectures.router)
 app.include_router(projects.router)
+app.include_router(usage_router.router)
 
 
 @app.get("/health")

@@ -1,5 +1,12 @@
 import { auth } from "./firebase";
-import type { DraftCard, DriveFolder, DueQueue, GradeResult, ScanResult } from "./types";
+import type {
+  DraftCard,
+  DriveFolder,
+  DueQueue,
+  GradeResult,
+  ScanResult,
+  Usage,
+} from "./types";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -104,4 +111,8 @@ export function answerCard(
     method: "POST",
     body: JSON.stringify({ projectId, text }),
   });
+}
+
+export function usage(month?: string): Promise<Usage> {
+  return request<Usage>(`/usage${month ? `?month=${encodeURIComponent(month)}` : ""}`);
 }

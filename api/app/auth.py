@@ -63,16 +63,18 @@ async def current_uid(request: Request) -> str:
     return str(uid)
 
 
-def sign_stream_token(lecture_id: str) -> tuple[str, int]:
+def sign_stream_token(lecture_id: str, uid: str) -> tuple[str, int]:
     """Mint a token that unlocks exactly one lecture.
 
     Returns the token and its absolute expiry. The lecture is a claim rather
     than an implicit scope so that a leaked URL exposes one video instead of
-    the whole library.
+    the whole library. The uid rides along so the byte accounting on the
+    stream route knows whose egress it is -- the video request carries no
+    Firebase token to read it from.
     """
     expires_at = int(time.time()) + settings().stream_token_ttl_s
     token = jwt.encode(
-        {"lid": lecture_id, "aud": _STREAM_AUDIENCE, "exp": expires_at},
+        {"lid": lecture_id, "uid": uid, "aud": _STREAM_AUDIENCE, "exp": expires_at},
         settings().stream_jwt_secret,
         algorithm="HS256",
     )
@@ -98,6 +100,24 @@ async def verify_stream_token(lecture_id: str, t: str = Query(default="")) -> st
     if claims.get("lid") != lecture_id:
         raise HTTPException(403, "Stream token is for a different lecture")
     return lecture_id
+
+
+def stream_token_uid(t: str) -> str:
+    """The uid inside an already-verified stream token, or empty if absent.
+
+    Tokens minted before the uid claim existed stay valid until they expire,
+    so this never raises -- unattributed bytes are better than a broken video.
+    """
+    try:
+        claims = jwt.decode(
+            t,
+            settings().stream_jwt_secret,
+            algorithms=["HS256"],
+            audience=_STREAM_AUDIENCE,
+        )
+    except jwt.InvalidTokenError:
+        return ""
+    return str(claims.get("uid", ""))
 
 
 CurrentUid = Depends(current_uid)

@@ -11,7 +11,7 @@ import {
   Title,
   UnstyledButton,
 } from "@mantine/core";
-import { IconBrandGoogleFilled, IconCards, IconLogout, IconSchool } from "@tabler/icons-react";
+import { IconBrandGoogleFilled, IconCards, IconCoin, IconLogout, IconSchool } from "@tabler/icons-react";
 import { onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { useEffect, useState } from "react";
@@ -121,6 +121,14 @@ export function App() {
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Label>{user.email}</Menu.Label>
+                <Menu.Item
+                  component={Link}
+                  to="/usage"
+                  leftSection={<IconCoin size={16} />}
+                >
+                  Usage &amp; cost
+                </Menu.Item>
+                <Menu.Divider />
                 <Menu.Item
                   leftSection={<IconLogout size={16} />}
                   onClick={() => void signOut(auth)}

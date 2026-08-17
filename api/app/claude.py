@@ -21,6 +21,7 @@ from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
+from app import usage as usage_meter
 from app.config import settings
 
 CARD_MODEL = "claude-sonnet-5"
@@ -87,7 +88,9 @@ Be direct and specific. If the method was right and the arithmetic wrong,
 say exactly that. Don't soften a 2 into a 3."""
 
 
-async def generate_cards(course: str, module: str, title: str, note: str, count: int) -> Cards:
+async def generate_cards(
+    uid: str, course: str, module: str, title: str, note: str, count: int
+) -> Cards:
     """Draft cards from a note. The student approves them before they are saved."""
     if not note.strip():
         raise HTTPException(400, "Write a note first -- cards are generated from it")
@@ -106,13 +109,14 @@ async def generate_cards(course: str, module: str, title: str, note: str, count:
             }
         ],
     )
+    await usage_meter.record_claude(uid, CARD_MODEL, response.usage)
     parsed = response.parsed_output
     if parsed is None:
         raise HTTPException(502, "Card generation returned no parsable output")
     return parsed
 
 
-async def grade_answer(question: str, reference: str, student: str) -> Grade:
+async def grade_answer(uid: str, question: str, reference: str, student: str) -> Grade:
     """Score a free-text answer on understanding.
 
     Answering in your own words and being judged on understanding rather than
@@ -132,6 +136,7 @@ async def grade_answer(question: str, reference: str, student: str) -> Grade:
             }
         ],
     )
+    await usage_meter.record_claude(uid, GRADE_MODEL, response.usage)
     parsed = response.parsed_output
     if parsed is None:
         raise HTTPException(502, "Grading returned no parsable output")

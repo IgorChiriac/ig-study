@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app import scan as scanner
 from app import store
+from app import usage as usage_meter
 from app.auth import current_uid
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -67,6 +68,7 @@ async def scan_project(
     elif not existing:
         project_fields["name"] = project_id
     await store.upsert_project(uid, project_id, project_fields)
+    await usage_meter.record_scan(uid, len(lectures))
 
     return ScanResponse(
         projectId=project_id,

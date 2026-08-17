@@ -27,13 +27,13 @@ def _secret(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 async def test_round_trip_unlocks_its_own_lecture() -> None:
-    token, expires_at = auth.sign_stream_token("drive-file-abc")
+    token, expires_at = auth.sign_stream_token("drive-file-abc", "user-123")
     assert await auth.verify_stream_token("drive-file-abc", token) == "drive-file-abc"
     assert expires_at > time.time()
 
 
 async def test_token_for_one_lecture_does_not_unlock_another() -> None:
-    token, _ = auth.sign_stream_token("drive-file-abc")
+    token, _ = auth.sign_stream_token("drive-file-abc", "user-123")
     with pytest.raises(HTTPException) as caught:
         await auth.verify_stream_token("drive-file-xyz", token)
     assert caught.value.status_code == 403
@@ -77,3 +77,18 @@ async def test_firebase_id_token_is_not_accepted_as_a_stream_token() -> None:
     with pytest.raises(HTTPException) as caught:
         await auth.verify_stream_token("drive-file-abc", shaped_like_firebase)
     assert caught.value.status_code == 401
+
+
+async def test_token_carries_the_uid_for_byte_accounting() -> None:
+    """The video request has no Firebase token, so egress is attributed here."""
+    token, _ = auth.sign_stream_token("drive-file-abc", "user-123")
+    assert auth.stream_token_uid(token) == "user-123"
+
+
+async def test_uid_lookup_on_a_forged_token_returns_empty_not_a_crash() -> None:
+    forged = jwt.encode(
+        {"lid": "drive-file-abc", "uid": "attacker", "aud": auth._STREAM_AUDIENCE},
+        "not-the-signing-key",
+        algorithm="HS256",
+    )
+    assert auth.stream_token_uid(forged) == ""
