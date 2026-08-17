@@ -12,6 +12,7 @@ import { App } from "./App";
 import { Course } from "./pages/Course";
 import { Lecture } from "./pages/Lecture";
 import { Projects } from "./pages/Projects";
+import { Quiz } from "./pages/Quiz";
 
 const theme = createTheme({
   primaryColor: "violet",
@@ -29,6 +30,7 @@ createRoot(document.getElementById("root")!).render(
         <Routes>
           <Route element={<App />}>
             <Route index element={<Projects />} />
+            <Route path="quiz" element={<Quiz />} />
             <Route path="c/:projectId" element={<Course />} />
             <Route path="c/:projectId/:lectureId" element={<Lecture />} />
           </Route>

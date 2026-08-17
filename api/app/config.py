@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     stream_jwt_secret: str = ""
     stream_token_ttl_s: int = 3600
 
+    anthropic_api_key: str = ""
+
+    study_timezone: str = "Europe/Zurich"
+    daily_new_cap: int = 30
+    daily_review_cap: int = 60
+
     firebase_project_id: str = "ig-study"
     allowed_origins: str = (
         "https://ig-study.web.app,https://ig-study.firebaseapp.com,http://localhost:5173"

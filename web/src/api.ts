@@ -1,5 +1,5 @@
 import { auth } from "./firebase";
-import type { DriveFolder, ScanResult } from "./types";
+import type { DraftCard, DriveFolder, DueQueue, GradeResult, ScanResult } from "./types";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -68,3 +68,40 @@ export function streamUrl(lectureId: string): Promise<{ url: string; expiresAt: 
 }
 
 export { ApiError };
+
+export function generateCards(
+  lectureId: string,
+  projectId: string,
+  count: number,
+): Promise<DraftCard[]> {
+  return request<DraftCard[]>(`/lectures/${encodeURIComponent(lectureId)}/cards:generate`, {
+    method: "POST",
+    body: JSON.stringify({ projectId, count }),
+  });
+}
+
+export function saveCards(
+  lectureId: string,
+  projectId: string,
+  cards: DraftCard[],
+): Promise<{ saved: number }> {
+  return request<{ saved: number }>(`/lectures/${encodeURIComponent(lectureId)}/cards`, {
+    method: "POST",
+    body: JSON.stringify({ projectId, cards }),
+  });
+}
+
+export function dueCards(): Promise<DueQueue> {
+  return request<DueQueue>("/cards/due");
+}
+
+export function answerCard(
+  cardId: string,
+  projectId: string,
+  text: string,
+): Promise<GradeResult> {
+  return request<GradeResult>(`/cards/${encodeURIComponent(cardId)}/answer`, {
+    method: "POST",
+    body: JSON.stringify({ projectId, text }),
+  });
+}

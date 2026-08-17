@@ -11,12 +11,13 @@ import {
   Title,
   UnstyledButton,
 } from "@mantine/core";
-import { IconBrandGoogleFilled, IconLogout, IconSchool } from "@tabler/icons-react";
+import { IconBrandGoogleFilled, IconCards, IconLogout, IconSchool } from "@tabler/icons-react";
 import { onAuthStateChanged, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 
+import { dueCards } from "./api";
 import { auth, googleProvider } from "./firebase";
 
 export function useUser(): { user: User | null; ready: boolean } {
@@ -64,6 +65,18 @@ function SignIn() {
 
 export function App() {
   const { user, ready } = useUser();
+  const [due, setDue] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    let live = true;
+    dueCards()
+      .then((queue) => live && setDue(queue.cards.length))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [user]);
 
   if (!ready) {
     return (
@@ -86,24 +99,37 @@ export function App() {
             </Group>
           </UnstyledButton>
 
-          <Menu position="bottom-end" withArrow>
-            <Menu.Target>
-              <UnstyledButton>
-                <Avatar src={user.photoURL} radius="xl" size={32}>
-                  {user.displayName?.[0] ?? "?"}
-                </Avatar>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Label>{user.email}</Menu.Label>
-              <Menu.Item
-                leftSection={<IconLogout size={16} />}
-                onClick={() => void signOut(auth)}
-              >
-                Sign out
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+          <Group gap="xs" wrap="nowrap">
+            <Button
+              component={Link}
+              to="/quiz"
+              size="xs"
+              variant={due > 0 ? "filled" : "subtle"}
+              color={due > 0 ? "violet" : "gray"}
+              leftSection={<IconCards size={16} />}
+            >
+              {due > 0 ? `${due} due` : "Quiz"}
+            </Button>
+
+            <Menu position="bottom-end" withArrow>
+              <Menu.Target>
+                <UnstyledButton>
+                  <Avatar src={user.photoURL} radius="xl" size={32}>
+                    {user.displayName?.[0] ?? "?"}
+                  </Avatar>
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>{user.email}</Menu.Label>
+                <Menu.Item
+                  leftSection={<IconLogout size={16} />}
+                  onClick={() => void signOut(auth)}
+                >
+                  Sign out
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
 

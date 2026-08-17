@@ -12,6 +12,7 @@ dependencies = [
     "google-cloud-firestore>=2.19",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
+    "anthropic>=0.69",
 ]
 
 [project.optional-dependencies]

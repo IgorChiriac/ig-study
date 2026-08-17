@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 
 import { ApiError, streamUrl } from "../api";
+import { CardDrafts } from "../components/CardDrafts";
 import { savePosition, saveNote, setSeen, watchLectures } from "../store";
 import type { Lecture as LectureDoc } from "../types";
 
@@ -217,9 +218,17 @@ export function Lecture() {
         <Grid.Col span={{ base: 12, md: 5 }}>
           <Stack gap="xs">
             <Group justify="space-between">
-              <Text fw={600} size="sm">
-                Your notes
-              </Text>
+              <Group gap="xs">
+                <Text fw={600} size="sm">
+                  Your notes
+                </Text>
+                <CardDrafts
+                  lectureId={lectureId}
+                  projectId={projectId}
+                  hasNote={note.trim().length > 20}
+                  onSaved={() => undefined}
+                />
+              </Group>
               <Badge size="xs" variant="light" color={saved ? "teal" : "yellow"}>
                 {saved ? "saved" : "saving…"}
               </Badge>
@@ -233,7 +242,8 @@ export function Lecture() {
               maxRows={30}
             />
             <Text size="xs" c="dimmed">
-              Saves automatically, straight to Firestore.
+              Saves automatically, straight to Firestore. Write at least a couple of sentences
+              before generating cards — they can only be as good as the note.
             </Text>
           </Stack>
         </Grid.Col>

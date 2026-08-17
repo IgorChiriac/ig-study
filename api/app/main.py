@@ -11,8 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import drive
 from app.config import settings
+from app.routers import cards, lectures, projects
 from app.routers import drive as drive_router
-from app.routers import lectures, projects
 
 log = logging.getLogger("ig-study")
 
@@ -37,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(drive_router.router)
+app.include_router(cards.router)
 app.include_router(lectures.router)
 app.include_router(projects.router)
 

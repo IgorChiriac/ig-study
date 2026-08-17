@@ -34,3 +34,37 @@ export type ScanResult = {
 };
 
 export type DriveFolder = { id: string; name: string };
+
+export type DraftCard = { q: string; a: string };
+
+export type DueCard = {
+  id: string;
+  projectId: string;
+  lectureId: string;
+  module: string;
+  q: string;
+  a: string;
+  due: string;
+  isNew: boolean;
+  isLeech: boolean;
+  lapses: number;
+};
+
+export type DueQueue = {
+  cards: DueCard[];
+  newRemaining: number;
+  reviewsRemaining: number;
+  newDue: number;
+  reviewsDue: number;
+};
+
+export type GradeResult = {
+  score: number;
+  verdict: string;
+  missing: string;
+  correction: string;
+  reference: string;
+  nextDue: string;
+  intervalDays: number;
+  isLeech: boolean;
+};
