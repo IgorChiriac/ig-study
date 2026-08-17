@@ -26,6 +26,7 @@ import http.server
 import os
 import secrets
 import sys
+import time
 import urllib.parse
 import webbrowser
 
@@ -43,6 +44,7 @@ REDIRECT_URI = f"http://localhost:{PORT}/callback"
 SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
+CONSENT_TIMEOUT_S = 300
 
 _received: dict[str, str | None] = {}
 
@@ -72,6 +74,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+def _callback_received() -> bool:
+    """Whether the OAuth redirect itself has arrived.
+
+    The browser may send other requests first — a favicon probe, a speculative
+    connection — and `_Handler` 404s those without touching `_received`. Serving
+    exactly one request would consume such a probe and look like a failed
+    consent, which is expensive here: re-running needs a revoke at
+    myaccount.google.com/permissions first. So the caller serves requests until
+    this returns True.
+    """
+    return bool(_received.get("code") or _received.get("error"))
+
+
 def main() -> int:
     client_id = os.environ.get("GOOGLE_CLIENT_ID")
     client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
@@ -99,9 +114,20 @@ def main() -> int:
     )
 
     server = http.server.HTTPServer(("localhost", PORT), _Handler)
+    server.timeout = CONSENT_TIMEOUT_S
     print(f"Opening your browser. If nothing happens, visit:\n\n{auth_url}\n")
     webbrowser.open(auth_url)
-    server.handle_request()  # blocks until Google redirects back once
+
+    deadline = time.monotonic() + CONSENT_TIMEOUT_S
+    while not _callback_received():
+        if time.monotonic() > deadline:
+            print(
+                f"No callback within {CONSENT_TIMEOUT_S}s — did the browser open?",
+                file=sys.stderr,
+            )
+            server.server_close()
+            return 1
+        server.handle_request()
     server.server_close()
 
     if _received.get("error"):

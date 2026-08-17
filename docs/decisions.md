@@ -42,7 +42,9 @@ Postgres would mean an instance to run, migrations to manage, and no offline cac
 
 ## 4. The client writes Firestore directly; the API is narrow
 
-The API exists for exactly three things a browser can't do: hold the Drive refresh token, hold the Anthropic key, and stream video bytes. Everything else — notes, seen flags, resume position, card state — goes client → Firestore, authorised by security rules.
+The API exists for four things a browser can't do: hold the Drive refresh token, hold the Anthropic key, stream video bytes, and walk Drive during a scan. Everything else — notes, seen flags, resume position, card state — goes client → Firestore, authorised by security rules.
+
+Scan is the exception that proves the rule. It needs the Drive credential, so it has to be server-side, and once you're there you may as well write the result — so scan results reach Firestore through the Admin SDK, which bypasses the security rules entirely. That means the API needs a service account with Firestore write access. It's the right design, but it's the one place "the client owns Firestore" isn't true, and it was previously described as three things when it was always four.
 
 Consequence: Cloud Run stays scaled to zero except while you're watching a video or generating cards, and note autosave costs nothing server-side and works offline.
 
@@ -61,9 +63,15 @@ Because there's one user, obtaining the refresh token is a one-time chore, not a
 
 ## 6. Single user, deliberately
 
-One password in an env var, one JWT, one dependency that validates it. No signup, no password reset, no email delivery, no per-user scoping.
+Sign-in is Firebase Auth with Google — one account, yours. No signup, no password reset, no email delivery.
 
-Adding multi-user later is a `user_id` column and a migration — a couple of hours. Building it upfront is days for an audience of one.
+**There is no password anywhere in this design.** An earlier iteration had one ("one password in an env var, one JWT"), and that sentence survived into the docs long after the design moved on. It's incompatible with everything else here: Firestore security rules key off `request.auth.uid`, which only a Firebase ID token produces, and the direct-to-Firestore architecture collapses without it. The Firebase path is the correct one.
+
+What survives from that iteration is *don't build multi-user*: no per-user scoping logic, no admin surface, no invitations. Firestore paths are still `users/{uid}/…` — that's the natural Firebase layout and it costs nothing, so it isn't a violation.
+
+There is a second, API-signed JWT in the system, but it's unrelated to identity — it's the short-lived stream token that lets a `<video>` tag authenticate (see [`build-plan.md`](build-plan.md) §2).
+
+Adding a real second user later is a migration — a couple of hours. Building it upfront is days for an audience of one.
 
 ## 7. The no-server architecture was considered and is closed
 
@@ -79,8 +87,12 @@ Plain, well-understood, about forty lines. Grade ≥3 grows the interval, below 
 
 FSRS is better and not better enough to justify the dependency here.
 
-## 9. Sonnet for cards, Haiku for grading
+## 9. `claude-sonnet-5` for cards, `claude-haiku-4-5` for grading
 
-Card generation needs judgment about what's worth testing; grading is high-volume and narrow. Both use structured output so the app parses validated JSON rather than prose. Around €1–3/month.
+Card generation needs judgment about what's worth testing; grading is high-volume and narrow. Both use structured output so the app parses validated JSON rather than prose. Around €1–3/month — grading dominates at roughly $1.90/month against the 60-review daily cap, and card generation is a one-off per lecture that rounds to nothing.
+
+The two are different API generations and **the same request shape does not work for both** — see [`gotchas.md`](gotchas.md). Sonnet 5's introductory pricing ($2/$10 per MTok vs $3/$15) ends **2026-08-31**, so don't build a cost model on it.
+
+Not chosen: `claude-opus-5` for card generation. It's the stronger model and the general default, but cards are drafted from a short note you already wrote and you approve them before they're saved — the judgment required is modest and the review step catches what's weak. Revisit if the drafts turn out to need heavy editing.
 
 The grading prompt is explicitly instructed not to soften scores. A tutor that rounds a 2 up to a 3 is worse than no tutor.

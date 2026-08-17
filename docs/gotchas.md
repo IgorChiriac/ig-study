@@ -107,9 +107,53 @@ Store an explicit `orderIdx` at scan time — `module_index * 1000 + lecture_ind
 
 Drive preserves `fileId` across renames and moves. Path hashes don't, so reorganising a folder silently orphans every note in it.
 
-### Firestore needs the composite index declared
+### The index you need is the collection-group one, not a composite
 
-`where('due','<=',now).orderBy('due')` requires a composite index. It works in the emulator and fails in production with a link to create it. Put it in `firestore.indexes.json` before deploying rather than discovering it live.
+`where('due','<=',now).orderBy('due')` does **not** need a composite index — an inequality plus an `orderBy` on the *same* field is served by Firestore's automatic single-field index. Declaring one is a no-op, and this doc previously claimed otherwise.
+
+What does need declaring: cards live at `users/{uid}/projects/{projectId}/cards`, so "12 due today" across every course is a **collection group** query — and those require an explicit index even for a single field. It's a `fieldOverrides` entry in `firestore.indexes.json`:
+
+```json
+{ "collectionGroup": "cards", "fieldPath": "due",
+  "indexes": [
+    { "order": "ASCENDING",  "queryScope": "COLLECTION" },
+    { "order": "DESCENDING", "queryScope": "COLLECTION" },
+    { "order": "ASCENDING",  "queryScope": "COLLECTION_GROUP" }
+  ] }
+```
+
+Keep the two COLLECTION entries — a `fieldOverride` replaces *all* index config for that field, so omitting them silently drops the defaults.
+
+A real composite index becomes necessary the moment a second field joins the query (`where('suspended','==',false).orderBy('due')`). That one does fail in production with a creation link, which is the failure mode this entry originally described.
+
+---
+
+## Claude API
+
+### The two models take different request shapes
+
+`claude-sonnet-5` and `claude-haiku-4-5` are different API generations. A request body that works on one can 400 on the other, and the errors don't say "wrong generation".
+
+| | `claude-sonnet-5` | `claude-haiku-4-5` |
+|---|---|---|
+| `output_config={"effort": …}` | Supported, defaults to `high` | **400 — the parameter errors on this model** |
+| Thinking | On by default; `budget_tokens` is a 400 | Old `budget_tokens` form; leave unset for grading |
+| `temperature` / `top_p` / `top_k` | 400 at non-default values | Accepted |
+| Assistant prefills | 400 | Accepted |
+
+`effort` on the grading call is the one most likely to bite — it reads like a harmless optimisation hint and is a hard error.
+
+### Never append a date suffix to a model ID
+
+`claude-sonnet-5` and `claude-haiku-4-5` are complete as written. A constructed ID like `claude-sonnet-5-20260401` 404s. (`claude-haiku-4-5-20251001` happens to resolve — prefer the alias anyway.)
+
+### Prompt caching below the minimum fails silently
+
+The minimum cacheable prefix is **4096 tokens on Haiku 4.5**, **1024 on Sonnet 5**. Below that, a `cache_control` marker returns no error and no cache — `cache_creation_input_tokens` is just `0`. A grading prompt is a few hundred tokens, so caching it does nothing at all. Verify any cache you think you have by reading `usage.cache_read_input_tokens`.
+
+### `max_tokens` caps thinking plus text
+
+It's not an output-length budget. Sonnet 5 thinks by default, so a `max_tokens` sized tightly around the expected JSON can truncate the answer mid-object. Size the card call at ~4–8K.
 
 ---
 

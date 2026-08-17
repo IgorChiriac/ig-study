@@ -73,7 +73,17 @@ This is the part with sharp edges. Three of them will each cost you an afternoon
 
 ### The gotchas
 
-**a. Your own endpoint has the same header problem Drive does.** `<video src>` can't send an `Authorization` header to *your* API either. So the stream URL carries a short-lived JWT in the query string. The SPA asks `GET /lectures/{id}/stream-url`, gets back a path with `?t=…` valid a few hours, and drops that into the video tag.
+**a. Your own endpoint has the same header problem Drive does.** `<video src>` can't send an `Authorization` header to *your* API either. So the stream URL carries a short-lived JWT in the query string. The SPA asks `GET /lectures/{id}/stream-url`, gets back a path with `?t=…`, and drops that into the video tag.
+
+That token is **API-signed, and not the Firebase ID token.** Firebase ID tokens are full-privilege credentials — handing one to anything that can read a URL is not acceptable, and the URL lands in browser history, referrer headers and Cloud Run request logs. So `verify_stream_jwt` validates a second token with its own design:
+
+| | |
+|---|---|
+| Signed with | A dedicated secret in Secret Manager — **a third secret**, alongside the Drive refresh token and the Anthropic key |
+| Claims | `lecture_id` (required) and `exp`. Scoping to one lecture means a leaked token unlocks one video, not the library |
+| TTL | **1 hour.** A seek mid-session reuses the token the page already has, so nothing longer buys you anything |
+
+Step 4 depends on this, so settle it in step 1.
 
 **b. Safari demands a file extension in the URL.** [Safari uniquely requires](https://corevo.io/the-weird-case-of-video-streaming-in-safari/) the URL to end in a matching video extension, on top of a correct `Content-Type`. So the route is `/lectures/{id}/stream.mp4`, **not** `/lectures/{id}/stream`. Chrome doesn't care. iOS silently refuses to play, with no useful error.
 
@@ -157,7 +167,11 @@ match /users/{uid}/{doc=**} {
 }
 ```
 
-One composite index on `cards`: `due ASC`. That's the whole "what's due today" query.
+**Indexes.** `where('due','<=',now).orderBy('due')` needs *no* composite index — an inequality filter plus an `orderBy` on the same field is served by the automatic single-field index Firestore builds for you. An earlier version of this plan called for a composite index on `due ASC`; that was a no-op.
+
+The index you actually need is a different one. Cards live at `users/{uid}/projects/{projectId}/cards`, so "what's due today" across every course is a **collection group** query — and collection group queries need an explicitly declared index even for a single field. That's the `fieldOverrides` entry in `firestore.indexes.json`, deployed alongside the rules.
+
+A composite index becomes necessary the moment a second field enters — `where('suspended','==',false).orderBy('due')`, or scoping by `lectureId`. Firestore's error message hands you a creation link when that happens.
 
 `orderIdx` is worth getting right at scan time — sort naturally so `10.` lands after `9.`, not after `1.`. Sorting course lists lexicographically is the single most common way these tools end up feeling broken.
 
@@ -175,9 +189,34 @@ Re-scan matches on `driveFileId`, inserts only what's new, and reports orphans (
 
 ## 5. Claude integration
 
-Keys in Secret Manager, never in the client. Both calls use structured output so you're parsing validated JSON, not prose.
+Keys in Secret Manager, never in the client. Both calls use structured output so you're parsing validated JSON, not prose — via `messages.parse()`, which is the right fit when the schema is small and fixed:
 
-### Card generation — Sonnet 5
+```python
+response = client.messages.parse(
+    model="claude-sonnet-5",
+    max_tokens=8192,
+    messages=[{"role": "user", "content": prompt}],
+    output_format=Cards,          # a Pydantic model
+)
+cards = response.parsed_output    # validated Cards instance
+```
+
+On `messages.create()` the equivalent is `output_config={"format": {"type": "json_schema", "schema": {...}}}`. A top-level `output_format=` on `create()` is the *old* parameter — don't reach for it, and don't use tool schemas either.
+
+> **The trap: these are two different API generations, and the same request shape does not work for both.**
+>
+> | | `claude-sonnet-5` (cards) | `claude-haiku-4-5` (grading) |
+> |---|---|---|
+> | Thinking | **On by default.** `budget_tokens` is a 400 | Old-style `budget_tokens` form — but leave `thinking` unset; grading doesn't want it |
+> | `output_config={"effort": …}` | Supported, defaults to `high` | **400. The parameter errors on this model** |
+> | `temperature` / `top_p` / `top_k` | 400 at any non-default value | Accepted |
+> | Assistant prefills | 400 | Accepted |
+>
+> Both IDs are complete as written — **never append a date suffix.**
+
+Because `max_tokens` caps thinking *plus* response text, and Sonnet 5 thinks by default, size the card-generation call generously (~4–8K) rather than tightly around the expected JSON. For a short note, `output_config={"effort": "medium"}` is likely right — sweep it.
+
+### Card generation — `claude-sonnet-5`
 
 `POST /lectures/{id}/cards:generate` → reads the note from Firestore, returns drafts for you to approve or edit before they're saved.
 
@@ -201,7 +240,7 @@ Write {n} question/answer cards testing *understanding*, not recall of wording.
 
 Schema: `{cards: [{q: string, a: string}]}`
 
-### Grading — Haiku 4.5
+### Grading — `claude-haiku-4-5`
 
 `POST /cards/{id}/answer` with `{text}`.
 
@@ -228,7 +267,9 @@ The score drives the scheduler; the prose goes on screen. Answering in your own 
 
 ### Discussion — optional, phase 2
 
-`POST /lectures/{id}/discuss` streaming SSE, with the note plus surrounding module notes as context. Prompt caching on the course context makes follow-up turns nearly free.
+`POST /lectures/{id}/discuss` streaming SSE, with the note plus surrounding module notes as context. Prompt caching on the course context makes follow-up turns nearly free — that context is large and stable, which is exactly what caching wants.
+
+**Caching does nothing for grading, and fails silently.** The minimum cacheable prefix is **4096 tokens on Haiku 4.5**; a grading prompt (question + reference answer + student answer) is a few hundred. A `cache_control` marker there produces no error and no cache — just `cache_creation_input_tokens: 0`. The minimum is **1024 on Sonnet 5**, so a card-generation call with a large shared course preamble *could* cache, but with 36 lectures generated once each there's nothing to reuse.
 
 ---
 

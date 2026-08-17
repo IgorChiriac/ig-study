@@ -3,6 +3,13 @@
 Review of the repo as it stands (docs + step-0 spike, no `api/` or `web/` yet) against the plan in
 [`build-plan.md`](build-plan.md), [`decisions.md`](decisions.md) and [`gotchas.md`](gotchas.md).
 
+> **Status — kept as the record of what was found, not a to-do list.**
+> **Applied:** 1a, 1b, 1c, 2a, 2b, 2c, 2d (docs corrected), 3b (stream-JWT design now specified in
+> `build-plan.md` §2), and the `get_refresh_token.py` single-request bug in §4.
+> **Open:** everything else — 3a and 3c–3j land during the build steps they name, and the remaining
+> §4 spike notes matter when `api/` inherits that code. The verdict and reasoning below stand as
+> written; don't re-apply the fixes above.
+
 **Verdict: the plan is sound and the spike is correct on the three things that matter.** The video
 route ends in `.mp4`, Drive's status code is passed straight through, and the body is streamed rather
 than buffered. Those are the three failure modes that invalidate everything else, and they're right.

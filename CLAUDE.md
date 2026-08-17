@@ -19,7 +19,7 @@ Single user (Igor). Videos live in Google Drive. Watched on desktop Chrome and o
 | Data | Firestore, written **directly from the client** |
 | API | FastAPI on Cloud Run |
 | Video | Google Drive, streamed through the API's Range proxy |
-| AI | Anthropic API — Sonnet for card generation, Haiku for grading |
+| AI | Anthropic API — `claude-sonnet-5` for card generation, `claude-haiku-4-5` for grading |
 
 ## Layout
 
@@ -39,8 +39,8 @@ These aren't style preferences. Breaking any one of them produces a bug that's h
 3. **Never buffer a video response.** Always `stream=True` plus an async generator. Reading a response body into memory will work on a 5 MB test file and fall over on a real lecture.
 4. **`<video src>` cannot send headers**, so the stream URL carries a short-lived JWT in the query string. Don't "fix" this by moving it to an `Authorization` header.
 5. **H.264 + AAC only.** Two engines are in play — WebKit on the phone, Blink on the desktop — and H.265 is what they disagree about.
-6. **Notes, seen flags and card state go client → Firestore directly.** The API exists only for what a browser can't do: hold Drive credentials, hold the Anthropic key, stream bytes. Don't route Firestore writes through FastAPI.
-7. **Don't build multi-user.** One user, one password, one JWT. Adding `user_id` later is a migration; building it now is days for nothing.
+6. **Notes, seen flags, resume position and card state go client → Firestore directly.** Scan results are the one exception — they're written server-side with the Admin SDK, because the scan needs the Drive credential anyway. The API exists for what a browser can't do: hold the Drive refresh token, hold the Anthropic key, stream bytes, walk Drive. Don't route the client's own writes through FastAPI.
+7. **Don't build multi-user.** Identity is Firebase Auth (Google sign-in) — that's what makes `request.auth.uid` exist, and the whole direct-to-Firestore design rests on it. Firestore paths are scoped by `uid` because that's the natural Firebase shape, *not* because multi-user is being built; don't "simplify" it away. Adding a second user later is a migration; building for one now is days for nothing.
 8. **Secrets never reach the client.** Anthropic key and Drive refresh token live in Secret Manager, server-side only.
 
 ## Conventions
@@ -49,7 +49,9 @@ These aren't style preferences. Breaking any one of them produces a bug that's h
 - TypeScript strict on. No `any` without a comment saying why.
 - Firestore document IDs come from Drive's stable `fileId`, never from a path hash — Drive preserves the ID across renames and moves, so reorganising folders never orphans a note.
 - Sort lecture lists **naturally**: `10.` comes after `9.`, not after `1.`. Lexicographic sorting is the single most common way these tools end up feeling broken.
-- Anthropic calls use structured output (tool schemas), never prose parsing.
+- Anthropic calls use structured output via `output_config.format` — or `messages.parse()`, which is the better fit here since both calls have a small fixed schema. Never prose parsing, and never tool schemas (that's the dated mechanism: more code, and you hunt the `tool_use` block out of the response yourself).
+- **Model IDs are complete as written — never append a date suffix.** `claude-sonnet-5` and `claude-haiku-4-5`.
+- **`effort` errors on Haiku 4.5.** `output_config={"effort": ...}` is a 400 on the grading call, not a hint. It's a Sonnet-5-only knob here; leave `thinking` unset on Haiku.
 
 ## Commands
 
