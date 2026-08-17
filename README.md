@@ -22,17 +22,29 @@ You point it at a Drive folder once. It scans the tree, builds the lecture list,
 
 ## Status
 
-| Step | | |
-|---|---|---|
-| 0 | Spike — prove Drive seeks through the proxy | see `spike/` |
-| 1 | FastAPI + Cloud Run + auth | not started |
-| 2 | Drive folder scan → Firestore | not started |
-| 3 | SPA: course tree, seen checkboxes | not started |
-| 4 | Lecture screen: player, notes, resume | not started |
-| 5 | Card generation, grading, SM-2 | not started |
-| 6 | Quiz screen, mobile layout, stats | not started |
+Deployed and working end to end on desktop.
 
-**Start with step 0.** It's the only step that can invalidate the other six, and it takes an hour or two. `spike/README.md` has the full runbook.
+| | | |
+|---|---|---|
+| 0 | Drive streams and seeks through the proxy | done — verified by `tools/smoke_test.py` |
+| 1 | FastAPI on Cloud Run, Firebase ID token auth | done |
+| 2 | Drive folder scan → Firestore | done — 37 lectures across 9 modules |
+| 3 | SPA: sign-in, course list, course tree | done |
+| 4 | Lecture screen: player, notes, resume | done |
+| 5 | Card generation, grading, SM-2 | done |
+| 6 | Quiz screen, usage and cost page | done |
+| — | Stats screen: reviews over time, weakest modules | not started |
+
+**Still unverified: playback on the iPhone.** Every byte-level property WebKit
+cares about is asserted by the smoke test — the route ends in `.mp4`, the
+opening two-byte probe is answered 206, seeks return the exact range — but no
+test can prove WebKit is happy. Desktop Chrome is forgiving about precisely the
+things it isn't.
+
+| | |
+|---|---|
+| App | https://ig-study.web.app |
+| API | https://ig-study-api-379754101088.europe-west1.run.app |
 
 ## Docs
 
@@ -48,10 +60,20 @@ You point it at a Drive folder once. It scans the tree, builds the lecture list,
 ```
 api/     FastAPI service → Cloud Run
 web/     React SPA → Firebase Hosting
-spike/   Step 0 proof — throwaway
-docs/    Plan and decisions
+tools/   One-off scripts: OAuth consent, ffmpeg prep, smoke test
+docs/    Plan, decisions, gotchas, review
 ```
 
 ## Running cost
 
-Around €3–8/month: Drive storage (free within your 15 GB), Cloud Run scaled to zero, ~€1.70 of egress at 20 hours of watching, Firestore and Auth and Hosting all inside their free tiers, and €1–3 of Anthropic API.
+Around €2–5/month, and the app meters it itself — see **Usage & cost** in the app.
+
+The original €1.70 egress estimate assumed ~14 GB of watching a month. The
+DynamoDB course is 394 MB for 3h18m, about 120 MB per hour, so 20 hours is
+closer to 2.4 GB and well under a euro. Measured Claude cost is about half a
+cent to draft a lecture's cards and $0.001 to grade an answer, so the 60/day cap
+comes to roughly $1.85/month. Drive storage, Firestore, Auth, Hosting and Cloud
+Run all sit inside free tiers at one user.
+
+A 10 CHF/month budget alert covers the Google side. Anthropic bills separately
+and is **not** part of it.

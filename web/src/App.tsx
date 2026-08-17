@@ -20,7 +20,7 @@ import { Link, Outlet } from "react-router-dom";
 import { dueCards } from "./api";
 import { auth, googleProvider } from "./firebase";
 
-export function useUser(): { user: User | null; ready: boolean } {
+function useUser(): { user: User | null; ready: boolean } {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   useEffect(() => onAuthStateChanged(auth, (next) => {

@@ -157,17 +157,6 @@ async def list_children(folder_id: str) -> list[DriveEntry]:
             return entries
 
 
-async def get_metadata(file_id: str) -> DriveEntry:
-    payload = await _get_json(
-        f"{FILES_URL}/{file_id}",
-        {
-            "fields": "id,name,size,mimeType,videoMediaMetadata(durationMillis)",
-            "supportsAllDrives": "true",
-        },
-    )
-    return _to_entry(payload)
-
-
 async def open_range(file_id: str, range_header: str) -> httpx.Response:
     """Open a streaming response for a byte range, status code untouched.
 

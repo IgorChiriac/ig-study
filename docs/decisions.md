@@ -59,7 +59,7 @@ So:
 | Firebase ID token | Browser | Who you are |
 | Google refresh token | Server, Secret Manager | Reach Drive, indefinitely |
 
-Because there's one user, obtaining the refresh token is a one-time chore, not a feature: run `spike/get_refresh_token.py` once and paste the result into config. **There is no OAuth callback endpoint in this app.** Build one when there's a second user.
+Because there's one user, obtaining the refresh token is a one-time chore, not a feature: run `tools/get_refresh_token.py` once and paste the result into config. **There is no OAuth callback endpoint in this app.** Build one when there's a second user.
 
 ## 6. Single user, deliberately
 

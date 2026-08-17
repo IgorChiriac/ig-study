@@ -85,7 +85,7 @@ Don't "clean this up" into a header. There's no way to set one on a video elemen
 
 The popup flow returns a Google *access* token valid ~1 hour, and no refresh token. There's no server-side renewal path from it.
 
-Hence the separate one-time offline-consent flow in `spike/get_refresh_token.py`. See decision 5.
+Hence the separate one-time offline-consent flow in `tools/get_refresh_token.py`. See decision 5.
 
 ### No refresh token on re-consent
 

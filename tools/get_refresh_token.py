@@ -4,14 +4,14 @@ One-time: obtain a Google Drive refresh token.
 
 You run this ONCE, ever. It opens a browser, you consent, and it prints a
 refresh token that never expires (unless you revoke it or leave it unused
-for six months). Put that token in .env and forget this script exists.
+for six months). Put that token in api/.env and forget this script exists.
 
 Why a refresh token and not the one Firebase gives you: Firebase's popup
 sign-in returns a Google *access* token valid ~1 hour and no refresh token.
 That is fine for a click and useless for a proxy that must keep serving byte
 ranges through a long study session, or for a background folder scan.
 
-Prerequisites (see spike/README.md for the click-by-click):
+Prerequisites (see api/README.md for the click-by-click):
   1. A Google Cloud project with the Drive API enabled
   2. An OAuth 2.0 Client ID of type "Desktop app"
   3. GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET exported, or in .env
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import http.server
 import os
+import pathlib
 import secrets
 import sys
 import time
@@ -32,11 +33,13 @@ import webbrowser
 
 import httpx
 
+ENV_FILE = pathlib.Path(__file__).resolve().parent.parent / "api" / ".env"
+
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
-except ImportError:  # dotenv is optional
+    load_dotenv(ENV_FILE)
+except ImportError:
     pass
 
 PORT = int(os.environ.get("OAUTH_CALLBACK_PORT", "8765"))

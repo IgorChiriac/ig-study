@@ -117,14 +117,6 @@ async def add_cards(
     return ids
 
 
-async def count_for_lecture(uid: str, project_id: str, lecture_id: str) -> int:
-    collection = cards_ref(uid, project_id).where("lectureId", "==", lecture_id)
-    total = 0
-    async for _ in collection.select([]).stream():
-        total += 1
-    return total
-
-
 async def daily_counts(uid: str, day: str) -> dict[str, int]:
     snapshot = (
         await client().collection("users").document(uid).collection("daily").document(day).get()

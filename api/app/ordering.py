@@ -58,11 +58,3 @@ def order_idx(module_index: int, lecture_index: int) -> int:
     wrong order rather than silently colliding with the next module.
     """
     return module_index * LECTURES_PER_MODULE + min(lecture_index, LECTURES_PER_MODULE - 1)
-
-
-def natural_key(name: str) -> tuple[int, int | str, str]:
-    """Sort key for display when no orderIdx exists yet."""
-    found = leading_number(name)
-    if found is None:
-        return (1, name.casefold(), name.casefold())
-    return (0, found, name.casefold())

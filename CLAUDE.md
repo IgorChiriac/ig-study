@@ -26,7 +26,7 @@ Single user (Igor). Videos live in Google Drive. Watched on desktop Chrome and o
 ```
 api/          FastAPI service → Cloud Run
 web/          React SPA → Firebase Hosting
-spike/        Step 0 throwaway proof (see spike/README.md)
+tools/        One-off scripts: OAuth consent, ffmpeg prep, smoke test
 docs/         Plan, decisions, gotchas
 ```
 
@@ -56,17 +56,20 @@ These aren't style preferences. Breaking any one of them produces a bug that's h
 ## Commands
 
 ```bash
-# spike
-cd spike && uvicorn main:app --host 0.0.0.0 --port 8000
-
 # api
 cd api && uvicorn app.main:app --reload
 
 # web
 cd web && npm run dev
 
+# tools
+python tools/get_refresh_token.py                  # one-time Drive consent
+python tools/prepare_upload.py <course> -o <out>   # faststart + codec check
+python tools/smoke_test.py --folder <driveId>      # end-to-end check
+
 # deploy
-gcloud run deploy ig-study-api --source api/
+gcloud run deploy ig-study-api --source api/ --region europe-west1 \
+  --allow-unauthenticated --timeout 3600 --concurrency 4
 firebase deploy --only hosting
 ```
 

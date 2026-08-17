@@ -19,7 +19,6 @@ from app.config import settings
 
 _BATCH_LIMIT = 400
 
-_SCAN_OWNED = ("driveFileId", "module", "title", "orderIdx", "durationS", "sizeBytes")
 _USER_OWNED_DEFAULTS: dict[str, Any] = {
     "seen": False,
     "note": "",
@@ -127,11 +126,6 @@ async def apply_scan(uid: str, project_id: str, lectures: list[Lecture]) -> Scan
         await batch.commit()
 
     return ScanResult(added=added, updated=updated, orphaned=orphaned)
-
-
-async def lecture_exists(uid: str, project_id: str, lecture_id: str) -> bool:
-    snapshot = await lectures_ref(uid, project_id).document(lecture_id).get()
-    return bool(snapshot.exists)
 
 
 async def find_lecture_project(uid: str, lecture_id: str) -> str | None:

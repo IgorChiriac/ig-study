@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.ordering import assign_indices, leading_number, natural_key, order_idx
+from app.ordering import assign_indices, leading_number, order_idx
 
 
 def test_leading_number_reads_common_prefixes() -> None:
@@ -59,8 +59,3 @@ def test_order_idx_keeps_modules_apart() -> None:
 
 def test_order_idx_clamps_rather_than_colliding() -> None:
     assert order_idx(1, 5000) < order_idx(2, 0)
-
-
-def test_natural_key_orders_prefixed_before_unprefixed() -> None:
-    names = ["Learning Sessions", "10. Ten", "2. Two"]
-    assert sorted(names, key=natural_key) == ["2. Two", "10. Ten", "Learning Sessions"]

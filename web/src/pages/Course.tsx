@@ -20,7 +20,7 @@ import type { Lecture } from "../types";
 
 type Ctx = { uid: string };
 
-export function formatDuration(seconds: number | null): string {
+function formatDuration(seconds: number | null): string {
   if (!seconds) return "";
   const total = Math.round(seconds);
   const minutes = Math.floor(total / 60);
