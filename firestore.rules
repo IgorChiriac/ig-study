@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// Everything the client owns lives under users/{uid}. One user today, but the
+// per-uid shape costs nothing and means "don't build multi-user" never becomes
+// a migration. See build-plan.md §3.
+//
+// The API writes scan results server-side with the Admin SDK, which bypasses
+// these rules entirely — they only gate the browser.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{doc=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}
