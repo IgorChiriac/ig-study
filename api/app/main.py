@@ -41,7 +41,12 @@ app.include_router(lectures.router)
 app.include_router(projects.router)
 
 
-@app.get("/healthz")
-async def healthz() -> dict[str, Any]:
-    """Liveness plus a configuration check that never leaks a secret value."""
+@app.get("/health")
+async def health() -> dict[str, Any]:
+    """Liveness plus a configuration check that never leaks a secret value.
+
+    Not `/healthz`: Google's frontend intercepts that path on Cloud Run and
+    answers its own 404 before the request reaches the container, which reads
+    as a broken deploy when everything else is fine.
+    """
     return {"ok": True, "missingConfig": settings().missing()}

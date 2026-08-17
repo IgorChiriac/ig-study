@@ -44,6 +44,90 @@ def warn(label: str, detail: str = "") -> None:
     print(f"[{WARN}] {label}{'  ' + detail if detail else ''}")
 
 
+def _firestore_reachable() -> tuple[bool, str, str]:
+    """Probe Firestore before doing any Drive work.
+
+    Without this the first write is where stale credentials surface, and the
+    client's own retry policy sits on the failure for five minutes before
+    reporting it -- long after the run looked like it was going fine.
+
+    The probe builds its own client rather than reusing the app's. asyncio.run
+    closes the loop it created, and a Firestore AsyncClient binds its gRPC
+    channel to the loop that built it -- so probing through the shared client
+    would leave the app holding a channel on a dead loop, which surfaces later
+    as `RuntimeError: Event loop is closed` from somewhere unrelated.
+    """
+    import asyncio
+    import contextlib
+
+    from app.config import settings
+    from google.api_core import exceptions as gcloud_exceptions
+    from google.api_core.retry import Retry
+    from google.cloud import firestore
+
+    async def probe() -> None:
+        client = firestore.AsyncClient(project=settings().firebase_project_id)
+        try:
+            reference = client.collection("_preflight").document("probe")
+            await reference.get(retry=Retry(deadline=15.0), timeout=15.0)
+        finally:
+            with contextlib.suppress(Exception):
+                client.close()
+
+    try:
+        asyncio.run(probe())
+    except gcloud_exceptions.Unauthenticated:
+        return False, "firestore credentials", "rejected"
+    except Exception as exc:
+        detail = str(exc).splitlines()[0][:90]
+        if "invalid_grant" in str(exc):
+            return False, "firestore credentials", "expired (invalid_grant)"
+        return False, "firestore reachable", detail
+    return True, "firestore reachable", ""
+
+
+def _wipe(uid: str, project: str) -> int:
+    """Delete what the run wrote, on a client of its own.
+
+    Same reasoning as the preflight: reusing the app's cached Firestore client
+    from a second event loop is what produces the `Event loop is closed`
+    failures this script kept tripping over.
+    """
+    import asyncio
+    import contextlib
+
+    from app.config import settings
+    from google.cloud import firestore
+
+    async def wipe() -> int:
+        client = firestore.AsyncClient(project=settings().firebase_project_id)
+        try:
+            lectures = (
+                client.collection("users")
+                .document(uid)
+                .collection("projects")
+                .document(project)
+                .collection("lectures")
+            )
+            removed = 0
+            async for snapshot in lectures.select([]).stream():
+                await lectures.document(snapshot.id).delete()
+                removed += 1
+            await (
+                client.collection("users")
+                .document(uid)
+                .collection("projects")
+                .document(project)
+                .delete()
+            )
+            return removed
+        finally:
+            with contextlib.suppress(Exception):
+                client.close()
+
+    return asyncio.run(wipe())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--folder", required=True, help="Drive folder id of the course")
@@ -53,12 +137,27 @@ def main() -> int:
     args = parser.parse_args()
 
     from app.auth import current_uid
-    from app.config import settings
     from app.main import app
     from fastapi.testclient import TestClient
 
     app.dependency_overrides[current_uid] = lambda: args.uid
-    client = TestClient(app)
+
+    with TestClient(app) as client:
+        return _run(client, args)
+
+
+def _run(client, args) -> int:
+    """Drive the API. The caller owns the TestClient context.
+
+    That context matters: entered as a context manager, TestClient holds one
+    event loop for every request. Constructed bare, it starts a fresh loop per
+    request -- and the app's module-level httpx and Firestore clients bind
+    their connection pools to whichever loop touched them first, so request
+    two fails with `Event loop is closed` from deep inside a transport. Under
+    uvicorn there is a single loop for the process lifetime, so this is a
+    harness artifact rather than a bug in the app.
+    """
+    from app.config import settings
 
     print(f"\ncourse folder : {args.folder}")
     print(f"writing to    : users/{args.uid}/projects/{args.project}\n")
@@ -66,6 +165,14 @@ def main() -> int:
     missing = settings().missing()
     if not report(not missing, "configuration complete", ", ".join(missing)):
         print("\nFill in api/.env before running this.")
+        return 1
+
+    if not report(*_firestore_reachable()):
+        print(
+            "\nFirestore rejected the local credentials. Refresh them with:\n"
+            "\n    gcloud auth application-default login"
+            "\n    gcloud auth application-default set-quota-project ig-study\n"
+        )
         return 1
 
     print("\n-- drive --")
@@ -185,21 +292,8 @@ def main() -> int:
 
     if not args.keep:
         print("\n-- cleanup --")
-        import asyncio
-
-        from app import store
-
-        async def wipe() -> int:
-            collection = store.lectures_ref(args.uid, args.project)
-            removed = 0
-            async for snapshot in collection.select([]).stream():
-                await collection.document(snapshot.id).delete()
-                removed += 1
-            await store.project_ref(args.uid, args.project).delete()
-            return removed
-
-        removed = asyncio.run(wipe())
-        report(True, "test documents removed", f"{removed} lecture doc(s)")
+        removed = _wipe(args.uid, args.project)
+        report(removed >= 0, "test documents removed", f"{removed} lecture doc(s)")
     else:
         print(f"\nkept: users/{args.uid}/projects/{args.project}")
 

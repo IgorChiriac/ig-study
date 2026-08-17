@@ -1,0 +1,27 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  overscroll-behavior-y: none;
+}
+
+video {
+  background: #000;
+  display: block;
+  width: 100%;
+}
+
+.lecture-row {
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.lecture-row:hover {
+  background-color: var(--mantine-color-dark-6);
+}
+
+.lecture-row[data-active="true"] {
+  background-color: var(--mantine-color-dark-5);
+}

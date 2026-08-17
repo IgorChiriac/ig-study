@@ -38,3 +38,5 @@ tmp/
 
 # api
 api/.venv/
+web/node_modules/
+web/dist/

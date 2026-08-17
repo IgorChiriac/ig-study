@@ -62,7 +62,7 @@ async def stream_url(
     )
 
 
-@router.get("/{lecture_id}/stream.mp4")
+@router.api_route("/{lecture_id}/stream.mp4", methods=["GET", "HEAD"])
 async def stream_video(
     request: Request,
     lecture_id: Annotated[str, Depends(verify_stream_token)],
@@ -72,6 +72,10 @@ async def stream_video(
     The lecture id *is* the Drive file id -- documents are keyed on it because
     Drive preserves that id across renames and moves -- so serving a seek costs
     no metadata lookup and no Firestore read.
+
+    HEAD is declared explicitly. Starlette's plain Route folds HEAD into any
+    GET route, but FastAPI's APIRoute does not, so without listing it here a
+    HEAD request gets a 405 and the short-circuit below never runs.
     """
     if request.method == "HEAD":
         return Response(

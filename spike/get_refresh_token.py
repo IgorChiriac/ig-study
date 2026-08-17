@@ -39,8 +39,9 @@ try:
 except ImportError:  # dotenv is optional
     pass
 
-PORT = 8765
-REDIRECT_URI = f"http://localhost:{PORT}/callback"
+PORT = int(os.environ.get("OAUTH_CALLBACK_PORT", "8765"))
+REDIRECT_HOST = os.environ.get("OAUTH_CALLBACK_HOST", "localhost")
+REDIRECT_URI = f"http://{REDIRECT_HOST}:{PORT}/callback"
 SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -113,8 +114,21 @@ def main() -> int:
         }
     )
 
-    server = http.server.HTTPServer(("localhost", PORT), _Handler)
+    try:
+        server = http.server.HTTPServer((REDIRECT_HOST, PORT), _Handler)
+    except OSError as exc:
+        print(
+            f"Cannot listen on {REDIRECT_HOST}:{PORT} ({exc}).\n"
+            f"Set OAUTH_CALLBACK_PORT to a free port, then register\n"
+            f"    http://{REDIRECT_HOST}:<that port>/callback\n"
+            f"as an authorized redirect URI on the OAuth client.",
+            file=sys.stderr,
+        )
+        return 1
+
     server.timeout = CONSENT_TIMEOUT_S
+    print(f"Redirect URI in use: {REDIRECT_URI}")
+    print("It must be registered on the OAuth client if that client is type 'Web application'.\n")
     print(f"Opening your browser. If nothing happens, visit:\n\n{auth_url}\n")
     webbrowser.open(auth_url)
 
