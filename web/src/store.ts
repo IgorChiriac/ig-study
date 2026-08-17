@@ -1,15 +1,17 @@
 import {
+  Timestamp,
   collection,
   doc,
   onSnapshot,
   orderBy,
   query,
   setDoc,
+  where,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Lecture, Module, Project } from "./types";
+import type { Card, Lecture, Module, Project, Review } from "./types";
 
 /**
  * Notes, seen flags and resume positions go straight from here to Firestore.
@@ -121,4 +123,74 @@ export function savePosition(
     { positionS: Math.floor(positionS) },
     { merge: true },
   );
+}
+
+
+export function watchCards(uid: string, projectId: string, onChange: (cards: Card[]) => void) {
+  return onSnapshot(
+    collection(db, "users", uid, "projects", projectId, "cards"),
+    (snapshot) => {
+      onChange(
+        snapshot.docs.map((entry) => {
+          const data = entry.data();
+          return {
+            id: entry.id,
+            lectureId: (data.lectureId as string) ?? "",
+            module: (data.module as string) ?? "",
+            due: (data.due as string) ?? "",
+            interval: (data.interval as number) ?? 0,
+            ease: (data.ease as number) ?? 2.5,
+            lapses: (data.lapses as number) ?? 0,
+            reps: (data.reps as number) ?? 0,
+          };
+        }),
+      );
+    },
+  );
+}
+
+/**
+ * Reviews since a cutoff, filtered to one course in memory.
+ *
+ * The query is a single-field inequality on `answeredAt` with an `orderBy` on
+ * that same field, which Firestore serves from its automatic index. Adding
+ * `projectId` to the query would need a composite index declared and deployed
+ * for a filter that costs nothing to apply here.
+ */
+export function watchRecentReviews(
+  uid: string,
+  projectId: string,
+  sinceDays: number,
+  onChange: (reviews: Review[]) => void,
+) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - sinceDays);
+  const recent = query(
+    collection(db, "users", uid, "reviews"),
+    where("answeredAt", ">=", Timestamp.fromDate(cutoff)),
+    orderBy("answeredAt"),
+  );
+  return onSnapshot(recent, (snapshot) => {
+    onChange(
+      snapshot.docs
+        .map((entry) => {
+          const data = entry.data();
+          const at = data.answeredAt as Timestamp | null;
+          return {
+            id: entry.id,
+            projectId: (data.projectId as string) ?? "",
+            lectureId: (data.lectureId as string) ?? "",
+            module: (data.module as string) ?? "",
+            grade: (data.grade as number) ?? 0,
+            wasNew: Boolean(data.wasNew),
+            answeredAt: at ? at.toDate() : new Date(),
+          };
+        })
+        .filter((review) => review.projectId === projectId),
+    );
+  });
+}
+
+export function saveGoal(uid: string, projectId: string, goalDate: string | null) {
+  return setDoc(doc(db, "users", uid, "projects", projectId), { goalDate }, { merge: true });
 }

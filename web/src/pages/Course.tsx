@@ -5,6 +5,7 @@ import {
   Checkbox,
   Container,
   Group,
+  Button,
   Loader,
   Paper,
   Progress,
@@ -12,7 +13,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconChevronLeft, IconPlayerPlayFilled } from "@tabler/icons-react";
+import { IconChartBar, IconChevronLeft, IconPlayerPlayFilled } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 
@@ -128,9 +129,20 @@ export function Course() {
           <Title order={3}>
             {projects.find((entry) => entry.id === projectId)?.name ?? projectId}
           </Title>
-          <Text size="sm" c="dimmed">
-            {seen}/{lectures.length}
-          </Text>
+          <Group gap="sm">
+            <Text size="sm" c="dimmed">
+              {seen}/{lectures.length}
+            </Text>
+            <Button
+              component={Link}
+              to={`/c/${projectId}/stats`}
+              size="compact-xs"
+              variant="light"
+              leftSection={<IconChartBar size={14} />}
+            >
+              Stats
+            </Button>
+          </Group>
         </Group>
         <Progress value={pct} radius="xl" color={pct === 100 ? "teal" : "violet"} />
       </Stack>

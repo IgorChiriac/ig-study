@@ -1,6 +1,14 @@
 :root {
   color-scheme: dark;
+
+  /* Chart series hue, validated against the dark surface with the palette
+     checker: inside the lightness band, above the chroma floor, past 3:1
+     contrast. Every chart shows a single measure, so there is no second
+     series colour — state is carried by icon and label instead. */
+  --chart-series: #9775fa;
+  --chart-track: #2c2e33;
 }
+
 
 body {
   overscroll-behavior-y: none;

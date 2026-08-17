@@ -19,6 +19,7 @@ export type Project = {
   orderIdx: number;
   source: "drive" | "youtube";
   driveFolderId?: string;
+  goalDate?: string | null;
   youtubePlaylistId?: string;
   channelTitle?: string;
 };
@@ -115,4 +116,25 @@ export type YouTubePreview = {
   skipped: number;
   totalDurationS: number;
   looksReversed: boolean;
+};
+
+export type Card = {
+  id: string;
+  lectureId: string;
+  module: string;
+  due: string;
+  interval: number;
+  ease: number;
+  lapses: number;
+  reps: number;
+};
+
+export type Review = {
+  id: string;
+  projectId: string;
+  lectureId: string;
+  module: string;
+  grade: number;
+  wasNew: boolean;
+  answeredAt: Date;
 };
