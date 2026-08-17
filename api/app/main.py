@@ -9,11 +9,12 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import drive
+from app import drive, youtube
 from app.config import settings
 from app.routers import cards, lectures, projects
 from app.routers import drive as drive_router
 from app.routers import usage as usage_router
+from app.routers import youtube as youtube_router
 
 log = logging.getLogger("ig-study")
 
@@ -25,6 +26,7 @@ async def lifespan(_: FastAPI):
         log.warning("Missing configuration: %s", ", ".join(missing))
     yield
     await drive.close()
+    await youtube.close()
 
 
 app = FastAPI(title="ig-study API", version="0.1.0", lifespan=lifespan)
@@ -42,6 +44,7 @@ app.include_router(cards.router)
 app.include_router(lectures.router)
 app.include_router(projects.router)
 app.include_router(usage_router.router)
+app.include_router(youtube_router.router)
 
 
 @app.get("/health")

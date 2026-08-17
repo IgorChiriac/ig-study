@@ -24,6 +24,7 @@ import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom
 
 import { ApiError, streamUrl } from "../api";
 import { CardDrafts } from "../components/CardDrafts";
+import { YouTubePlayer } from "../components/YouTubePlayer";
 import { savePosition, saveNote, setSeen, watchLectures } from "../store";
 import type { Lecture as LectureDoc } from "../types";
 
@@ -53,11 +54,15 @@ export function Lecture() {
   const previous = index > 0 ? lectures?.[index - 1] : undefined;
   const next = index >= 0 && lectures ? lectures[index + 1] : undefined;
 
+  const isYouTube = lecture?.source === "youtube";
+
   useEffect(() => {
     resumedRef.current = false;
     noteLoadedRef.current = false;
     setSrc(null);
     setError(null);
+    if (lectures === null || isYouTube) return;
+
     let live = true;
     streamUrl(lectureId)
       .then((result) => live && setSrc(result.url))
@@ -68,7 +73,7 @@ export function Lecture() {
     return () => {
       live = false;
     };
-  }, [lectureId]);
+  }, [lectureId, lectures, isYouTube]);
 
   useEffect(() => {
     if (lecture && !noteLoadedRef.current) {
@@ -155,6 +160,17 @@ export function Lecture() {
                 <Alert color="red" icon={<IconAlertTriangle size={16} />} radius={0}>
                   {error}
                 </Alert>
+              ) : lecture.source === "youtube" && lecture.youtubeVideoId ? (
+                <YouTubePlayer
+                  videoId={lecture.youtubeVideoId}
+                  startAt={lecture.positionS}
+                  onPosition={(seconds) =>
+                    void savePosition(uid, projectId, lectureId, seconds)
+                  }
+                  onEnded={() => {
+                    if (!lecture.seen) void setSeen(uid, projectId, lectureId, true);
+                  }}
+                />
               ) : src ? (
                 <video
                   ref={videoRef}

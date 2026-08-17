@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     stream_token_ttl_s: int = 3600
 
     anthropic_api_key: str = ""
+    youtube_api_key: str = ""
 
     study_timezone: str = "Europe/Zurich"
     daily_new_cap: int = 30

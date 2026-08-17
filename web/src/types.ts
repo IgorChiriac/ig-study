@@ -1,6 +1,8 @@
 export type Lecture = {
   id: string;
+  source: "drive" | "youtube";
   driveFileId: string;
+  youtubeVideoId: string | null;
   module: string;
   title: string;
   orderIdx: number;
@@ -14,7 +16,10 @@ export type Lecture = {
 export type Project = {
   id: string;
   name: string;
+  source: "drive" | "youtube";
   driveFolderId?: string;
+  youtubePlaylistId?: string;
+  channelTitle?: string;
 };
 
 export type Module = {
@@ -92,4 +97,21 @@ export type Usage = {
   totalUsd: number;
   freeTier: Record<string, number>;
   prices: Record<string, { inputUsdPerMTok: number; outputUsdPerMTok: number; note: string }>;
+};
+
+export type YouTubePlaylist = {
+  playlistId: string;
+  title: string;
+  itemCount: number;
+  channelTitle: string;
+};
+
+export type YouTubePreview = {
+  playlistId: string;
+  title: string;
+  channelTitle: string;
+  videos: { videoId: string; title: string; durationS: number | null }[];
+  skipped: number;
+  totalDurationS: number;
+  looksReversed: boolean;
 };

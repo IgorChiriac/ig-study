@@ -28,7 +28,10 @@ export function watchProjects(uid: string, onChange: (projects: Project[]) => vo
       snapshot.docs.map((entry) => ({
         id: entry.id,
         name: (entry.data().name as string) ?? entry.id,
+        source: ((entry.data().source as string) ?? "drive") as "drive" | "youtube",
         driveFolderId: entry.data().driveFolderId as string | undefined,
+        youtubePlaylistId: entry.data().youtubePlaylistId as string | undefined,
+        channelTitle: entry.data().channelTitle as string | undefined,
       })),
     );
   });
@@ -46,7 +49,9 @@ export function watchLectures(
         const data = entry.data();
         return {
           id: entry.id,
+          source: ((data.source as string) ?? "drive") as "drive" | "youtube",
           driveFileId: (data.driveFileId as string) ?? entry.id,
+          youtubeVideoId: (data.youtubeVideoId as string | undefined) ?? null,
           module: (data.module as string) ?? "",
           title: (data.title as string) ?? entry.id,
           orderIdx: (data.orderIdx as number) ?? 0,

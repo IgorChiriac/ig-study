@@ -62,6 +62,7 @@ def _module_lectures(
     lecture_indices = assign_indices([video.name for video in videos])
     return [
         Lecture(
+            source="drive",
             drive_file_id=video.id,
             module=module,
             title=_title(video.name),

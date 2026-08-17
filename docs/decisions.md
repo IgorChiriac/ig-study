@@ -96,3 +96,38 @@ The two are different API generations and **the same request shape does not work
 Not chosen: `claude-opus-5` for card generation. It's the stronger model and the general default, but cards are drafted from a short note you already wrote and you approve them before they're saved — the judgment required is modest and the review step catches what's weak. Revisit if the drafts turn out to need heavy editing.
 
 The grading prompt is explicitly instructed not to soften scores. A tutor that rounds a 2 up to a 3 is worse than no tutor.
+
+## 10. YouTube courses are embedded, not proxied
+
+**Chosen** the YouTube IFrame Player API. No proxy, no egress on our bill, no
+Range semantics, and nothing downloaded.
+
+This looks like it contradicts decision 2, which rejected Drive's iframe player.
+It doesn't: that rejection was specifically because Drive's `/preview` iframe
+exposes no `currentTime`, no resume and no seeking, which kills the note-taking
+loop. YouTube's IFrame API exposes all three. The objection was about the
+player's API surface, not about embedding, so it doesn't carry over.
+
+Downloading with `yt-dlp` and serving through the existing proxy would reuse
+more code and is **not** on the table: it breaks YouTube's terms, and the whole
+reason the Drive proxy exists is that Drive gives no alternative. YouTube does.
+
+**Consequence:** a YouTube course costs nothing to watch. The €/GB egress in
+section 10 of the build plan applies only to Drive courses.
+
+## 11. Playlist position is a hint, not the order
+
+Playlist order is *usually* the watch order, and for a course-shaped playlist it
+usually is. But a channel that appends each upload ends up with its own course
+backwards — and that is not hypothetical, it is exactly what Patrick Boyle's
+Applied Portfolio Management playlist does: Class 1 sits at position 7.
+
+So the scan reads lesson numbers out of the titles (`Class 3`, `Part 2`, `#4`),
+checks whether they run against the playlist position, and pre-selects a reverse
+toggle when they disagree — showing the resulting order for confirmation before
+anything is written. Only stated lesson numbers count; bare numbers are ignored,
+because titles are full of years and percentages and treating those as an
+ordering would be worse than having none.
+
+**Rejected:** trusting position silently (wrong for the first course tried), and
+reordering silently on the heuristic (a wrong guess is then invisible).

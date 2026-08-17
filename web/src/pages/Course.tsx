@@ -76,7 +76,7 @@ export function Course() {
             <Accordion.Control>
               <Group justify="space-between" pr="sm">
                 <Text fw={600} size="sm">
-                  {module.name || "Course root"}
+                  {module.name || "Lectures"}
                 </Text>
                 <Badge
                   variant="light"

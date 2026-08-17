@@ -37,24 +37,42 @@ def client() -> firestore.AsyncClient:
 
 @dataclass(slots=True)
 class Lecture:
-    """One video, as the scan discovered it."""
+    """One video, as a scan discovered it, from either source."""
 
-    drive_file_id: str
     module: str
     title: str
     order_idx: int
     duration_s: float | None
-    size_bytes: int | None
+    source: str = "drive"
+    drive_file_id: str | None = None
+    youtube_video_id: str | None = None
+    size_bytes: int | None = None
+
+    @property
+    def key(self) -> str:
+        """The document id: whichever platform's own stable identifier applies.
+
+        Drive preserves `fileId` across renames and moves; a YouTube video id
+        never changes either. Keying on the platform id rather than a path
+        hash is what stops a reorganised folder or a retitled video orphaning
+        the note attached to it.
+        """
+        return self.drive_file_id or self.youtube_video_id or ""
 
     def to_scan_fields(self) -> dict[str, Any]:
-        return {
-            "driveFileId": self.drive_file_id,
+        fields: dict[str, Any] = {
+            "source": self.source,
             "module": self.module,
             "title": self.title,
             "orderIdx": self.order_idx,
             "durationS": self.duration_s,
-            "sizeBytes": self.size_bytes,
         }
+        if self.drive_file_id:
+            fields["driveFileId"] = self.drive_file_id
+            fields["sizeBytes"] = self.size_bytes
+        if self.youtube_video_id:
+            fields["youtubeVideoId"] = self.youtube_video_id
+        return fields
 
 
 @dataclass(slots=True)
@@ -104,7 +122,7 @@ async def apply_scan(uid: str, project_id: str, lectures: list[Lecture]) -> Scan
     async for snapshot in collection.select([]).stream():
         existing.add(snapshot.id)
 
-    scanned = {lecture.drive_file_id for lecture in lectures}
+    scanned = {lecture.key for lecture in lectures}
     added = sorted(scanned - existing)
     updated = sorted(scanned & existing)
     orphaned = sorted(existing - scanned)
@@ -114,9 +132,9 @@ async def apply_scan(uid: str, project_id: str, lectures: list[Lecture]) -> Scan
     for lecture in lectures:
         fields = lecture.to_scan_fields()
         fields["updatedAt"] = firestore.SERVER_TIMESTAMP
-        if lecture.drive_file_id not in existing:
+        if lecture.key not in existing:
             fields.update(_USER_OWNED_DEFAULTS)
-        batch.set(collection.document(lecture.drive_file_id), fields, merge=True)
+        batch.set(collection.document(lecture.key), fields, merge=True)
         pending += 1
         if pending >= _BATCH_LIMIT:
             await batch.commit()

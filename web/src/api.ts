@@ -6,6 +6,8 @@ import type {
   GradeResult,
   ScanResult,
   Usage,
+  YouTubePlaylist,
+  YouTubePreview,
 } from "./types";
 
 const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -115,4 +117,29 @@ export function answerCard(
 
 export function usage(month?: string): Promise<Usage> {
   return request<Usage>(`/usage${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+}
+
+export function resolveYouTube(url: string): Promise<{
+  kind: "playlist" | "channel";
+  playlists: YouTubePlaylist[];
+}> {
+  return request(`/youtube/resolve?url=${encodeURIComponent(url)}`);
+}
+
+export function previewYouTube(playlistId: string, reverse: boolean): Promise<YouTubePreview> {
+  return request<YouTubePreview>(
+    `/youtube/preview/${encodeURIComponent(playlistId)}?reverse=${reverse}`,
+  );
+}
+
+export function scanYouTube(
+  projectId: string,
+  playlistId: string,
+  name: string,
+  reverse: boolean,
+): Promise<{ lectures: number; added: number; skipped: number }> {
+  return request(`/youtube/scan/${encodeURIComponent(projectId)}`, {
+    method: "POST",
+    body: JSON.stringify({ playlistId, name, reverse }),
+  });
 }

@@ -64,7 +64,7 @@ async def preview_folder(
         modules=sorted({lecture.module for lecture in lectures}),
         lectures=[
             PreviewLecture(
-                id=lecture.drive_file_id,
+                id=lecture.key,
                 module=lecture.module,
                 title=lecture.title,
                 orderIdx=lecture.order_idx,

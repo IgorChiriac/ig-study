@@ -13,17 +13,26 @@ import {
   ScrollArea,
   SimpleGrid,
   Stack,
+  Tabs,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
-import { IconAlertTriangle, IconFolder, IconPlus, IconRefresh } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconBrandGoogleDrive,
+  IconBrandYoutube,
+  IconFolder,
+  IconPlus,
+  IconRefresh,
+} from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 
 import { ApiError, listFolders, scanProject } from "../api";
+import { AddYouTube } from "../components/AddYouTube";
 import { watchLectures, watchProjects } from "../store";
 import type { DriveFolder, Lecture, Project } from "../types";
 
@@ -57,9 +66,16 @@ function ProjectCard({ uid, project }: { uid: string; project: Project }) {
           <Text fw={600} truncate>
             {project.name}
           </Text>
-          <Text size="sm" c="dimmed">
-            {seen} of {lectures.length} watched
-          </Text>
+          <Group gap={6} wrap="nowrap">
+            {project.source === "youtube" ? (
+              <IconBrandYoutube size={13} opacity={0.6} />
+            ) : (
+              <IconBrandGoogleDrive size={13} opacity={0.6} />
+            )}
+            <Text size="sm" c="dimmed">
+              {seen} of {lectures.length} watched
+            </Text>
+          </Group>
           {minutes > 0 && (
             <Text size="xs" c="dimmed">
               {Math.floor(minutes / 60)}h {minutes % 60}m total
@@ -207,7 +223,8 @@ export function Projects() {
             <IconFolder size={40} stroke={1.3} />
             <Text fw={600}>No courses yet</Text>
             <Text c="dimmed" size="sm" ta="center">
-              Point ig-study at a Drive folder whose subfolders are the modules.
+              Paste a YouTube course or playlist, or point ig-study at a Drive folder whose
+              subfolders are the modules.
             </Text>
             <Button onClick={open} leftSection={<IconPlus size={16} />} mt="xs">
               Add a course
@@ -222,25 +239,42 @@ export function Projects() {
         </SimpleGrid>
       )}
 
-      <Modal opened={opened} onClose={close} title="Add a course" centered>
-        <Stack>
-          <TextInput
-            label="Course name"
-            placeholder="Leave blank to use the folder name"
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-          {busy ? (
-            <Group justify="center" py="xl">
-              <Loader size="sm" />
-              <Text size="sm" c="dimmed">
-                Walking Drive…
-              </Text>
-            </Group>
-          ) : (
-            <FolderPicker onPick={(folder) => void handlePick(folder)} />
-          )}
-        </Stack>
+      <Modal opened={opened} onClose={close} title="Add a course" centered size="lg">
+        <Tabs defaultValue="youtube">
+          <Tabs.List mb="md">
+            <Tabs.Tab value="youtube" leftSection={<IconBrandYoutube size={16} />}>
+              YouTube
+            </Tabs.Tab>
+            <Tabs.Tab value="drive" leftSection={<IconBrandGoogleDrive size={16} />}>
+              Google Drive
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="youtube">
+            <AddYouTube onDone={close} />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="drive">
+            <Stack>
+              <TextInput
+                label="Course name"
+                placeholder="Leave blank to use the folder name"
+                value={name}
+                onChange={(event) => setName(event.currentTarget.value)}
+              />
+              {busy ? (
+                <Group justify="center" py="xl">
+                  <Loader size="sm" />
+                  <Text size="sm" c="dimmed">
+                    Walking Drive…
+                  </Text>
+                </Group>
+              ) : (
+                <FolderPicker onPick={(folder) => void handlePick(folder)} />
+              )}
+            </Stack>
+          </Tabs.Panel>
+        </Tabs>
       </Modal>
     </Container>
   );

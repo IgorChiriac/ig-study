@@ -9,7 +9,7 @@ Built for one person, watching course videos on a laptop and an iPhone.
 ## How it works
 
 ```
-Course videos in Google Drive
+Course videos in Google Drive, or a YouTube playlist
         │
         ▼
 FastAPI on Cloud Run ──── streams video (Range proxy)
@@ -33,6 +33,7 @@ Deployed and working end to end on desktop.
 | 4 | Lecture screen: player, notes, resume | done |
 | 5 | Card generation, grading, SM-2 | done |
 | 6 | Quiz screen, usage and cost page | done |
+| 7 | YouTube courses: playlist scan, IFrame player, reverse detection | done |
 | — | Stats screen: reviews over time, weakest modules | not started |
 
 **Still unverified: playback on the iPhone.** Every byte-level property WebKit
