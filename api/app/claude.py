@@ -17,8 +17,6 @@ hundred, so a cache_control marker there would silently do nothing.
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -89,7 +87,6 @@ Write {n} question/answer cards testing *understanding*, not recall of wording.
   applying it to a new case, not restating it.
 - Answers: 1-3 sentences, precise.
 - Nothing about the video's structure or the instructor."""
-
 
 GRADE_PROMPT = """Question:          {question}
 Reference answer:  {reference}
@@ -179,94 +176,77 @@ async def grade_answer(uid: str, question: str, reference: str, student: str) ->
     return parsed
 
 
-DOC_PROMPT = """You are making study cards for someone working through: {course}
-
-Read these pages:
-{urls}
-{focus}
-Write {n} question/answer cards testing *understanding* of what those pages say.
-
-- Ground every card in what you actually read. If the pages do not cover
-  something, do not write a card about it.
+STORED_PROMPT = """Write {n} question/answer cards from the reference material above, \
+for someone studying: {course}
+{focus}{avoid}
+- Ground every card in what the material actually says. Do not add outside knowledge.
 - Prefer "why" and "when would you" over "what is".
-- Where the pages give a limit, a formula or a number, at least one card must
+- Where the material gives a limit, a formula or a number, at least one card must
   require applying it to a new case rather than restating it.
 - Answers: 1-3 sentences, precise.
 - Nothing about the page's navigation, layout or publication date."""
 
 
-def _domains(urls: list[str]) -> list[str]:
-    """Hosts the fetch is confined to.
-
-    Scoped to the hosts actually supplied, so following a link inside the same
-    documentation site is allowed and wandering off it is not. That keeps the
-    cards on topic as much as it keeps the fetching bounded.
-    """
-    hosts: list[str] = []
-    for url in urls:
-        host = urlparse(url).hostname
-        if host and host not in hosts:
-            hosts.append(host)
-    return hosts
-
-
-async def generate_cards_from_docs(
+async def generate_cards_from_text(
     uid: str,
     course: str,
-    urls: list[str],
+    title: str,
+    text: str,
     count: int,
     focus: str = "",
+    avoid: list[str] | None = None,
 ) -> Cards:
-    """Draft cards from reference documentation.
+    """Cards from already-ingested material. No fetch.
 
-    Uses the server-side web_fetch tool, so the pages are retrieved and
-    extracted by Anthropic rather than by us -- no scraper to maintain, and no
-    trouble with documentation sites that render through JavaScript. The tool
-    only fetches URLs already in the conversation, which the prompt supplies.
+    The material sits in `system` behind a cache breakpoint, which is the whole
+    reason ingesting is worth doing: a tool result cannot be cached, but stored
+    text can, so asking the same page for a second batch bills the bulk of the
+    input at cache-read rates. Sonnet 5 caches from 1024 tokens up, and a
+    documentation page is comfortably past that.
 
-    This costs meaningfully more than generating from a note: a single
-    documentation page ran to roughly 27k input tokens in testing, against a
-    few hundred for a note. The usage page meters it per model.
+    Questions already held for this material are listed so it writes new cards
+    rather than near-duplicates of ones being paid for a second time.
     """
-    if not urls:
-        raise HTTPException(400, "Add at least one documentation link first")
+    if not text.strip():
+        raise HTTPException(400, "That page has not been ingested yet")
 
-    prompt = DOC_PROMPT.format(
-        course=course,
-        urls="\n".join(f"- {url}" for url in urls),
-        focus=f"\nFocus on: {focus}\n" if focus.strip() else "",
-        n=count,
-    )
+    already = ""
+    if avoid:
+        listed = "\n".join(f"- {question}" for question in avoid[:40])
+        already = f"\nCards already written from this material, do not repeat them:\n{listed}\n"
 
-    # The budget has to cover thinking as well as the JSON, and a fetched page
-    # makes the model think a lot more than a note does -- 8k truncated mid
-    # object. Above roughly this size the SDK refuses a non-streaming call on
-    # the grounds it might run past ten minutes, so the timeout is raised to
-    # say that is expected. These take well under a minute in practice.
-    response = await client().with_options(timeout=600.0).messages.parse(
-        model=CARD_MODEL,
-        max_tokens=16000,
-        output_format=Cards,
-        output_config={"effort": "medium"},
-        tools=[
-            {
-                "type": "web_fetch_20260209",
-                "name": "web_fetch",
-                "max_uses": max(3, len(urls) + 2),
-                "allowed_domains": _domains(urls),
-                "max_content_tokens": 60000,
-            }
-        ],
-        messages=[{"role": "user", "content": prompt}],
+    response = (
+        await client()
+        .with_options(timeout=600.0)
+        .messages.parse(
+            model=CARD_MODEL,
+            max_tokens=16000,
+            output_format=Cards,
+            output_config={"effort": "medium"},
+            system=[
+                {
+                    "type": "text",
+                    "text": f"Reference material — {title}\n\n{text}",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[
+                {
+                    "role": "user",
+                    "content": STORED_PROMPT.format(
+                        n=count,
+                        course=course,
+                        focus=f"\nFocus on: {focus}\n" if focus.strip() else "",
+                        avoid=already,
+                    ),
+                }
+            ],
+        )
     )
 
     await usage_meter.record_claude(uid, CARD_MODEL, response.usage)
-    _reject_truncated(response, "Reading those pages")
+    _reject_truncated(response, "Card generation")
     parsed = response.parsed_output
     if parsed is None:
-        raise HTTPException(
-            502,
-            "Could not read those pages well enough to write cards. "
-            "A deep link to a specific topic works better than an index page.",
-        )
+        raise HTTPException(502, "Card generation returned no parsable output")
     return parsed

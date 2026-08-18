@@ -5,6 +5,7 @@ import type {
   DueQueue,
   GradeResult,
 
+  Chapter,
   ScanResult,
   Usage,
   YouTubePlaylist,
@@ -145,15 +146,33 @@ export function scanYouTube(
   });
 }
 
+export function discoverChapters(url: string): Promise<{ chapters: Chapter[] }> {
+  return request<{ chapters: Chapter[] }>("/docs/discover", {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
+
+export function ingestDoc(
+  projectId: string,
+  url: string,
+  label = "",
+): Promise<{ docId: string; label: string; chars: number; approxTokens: number }> {
+  return request("/docs/ingest", {
+    method: "POST",
+    body: JSON.stringify({ projectId, url, label }),
+  });
+}
+
 export function generateDocCards(
   projectId: string,
-  urls: string[],
+  docId: string,
   count: number,
   focus: string,
 ): Promise<DraftCard[]> {
   return request<DraftCard[]>("/docs/cards:generate", {
     method: "POST",
-    body: JSON.stringify({ projectId, urls, count, focus }),
+    body: JSON.stringify({ projectId, docId, count, focus }),
   });
 }
 

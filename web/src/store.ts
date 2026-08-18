@@ -209,15 +209,12 @@ export function watchDocs(uid: string, projectId: string, onChange: (docs: DocLi
           url: (entry.data().url as string) ?? "",
           label: (entry.data().label as string) ?? "",
           cardCount: (entry.data().cardCount as number) ?? 0,
+          chars: (entry.data().chars as number) ?? 0,
+          approxTokens: (entry.data().approxTokens as number) ?? 0,
         })),
       );
     },
   );
-}
-
-export function addDoc(uid: string, projectId: string, url: string, label: string) {
-  const reference = doc(collection(db, "users", uid, "projects", projectId, "docs"));
-  return setDoc(reference, { url, label, cardCount: 0 });
 }
 
 export function removeDoc(uid: string, projectId: string, docId: string) {

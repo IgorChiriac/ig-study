@@ -144,4 +144,8 @@ export type DocLink = {
   url: string;
   label: string;
   cardCount: number;
+  chars: number;
+  approxTokens: number;
 };
+
+export type Chapter = { title: string; url: string };

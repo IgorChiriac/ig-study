@@ -8,8 +8,10 @@ import {
   Container,
   Group,
   Loader,
+  Checkbox,
   Modal,
   NumberInput,
+  ScrollArea,
   Stack,
   Text,
   TextInput,
@@ -24,6 +26,7 @@ import {
   IconBook,
   IconChevronLeft,
   IconExternalLink,
+  IconListSearch,
   IconPlus,
   IconSparkles,
   IconTrash,
@@ -31,22 +34,17 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 
-import { ApiError, generateDocCards, saveDocCards } from "../api";
-import { addDoc, bumpDocCards, removeDoc, watchDocs, watchProjects } from "../store";
-import type { DocLink, DraftCard, Project } from "../types";
+import {
+  ApiError,
+  discoverChapters,
+  generateDocCards,
+  ingestDoc,
+  saveDocCards,
+} from "../api";
+import { bumpDocCards, removeDoc, watchDocs, watchProjects } from "../store";
+import type { Chapter, DocLink, DraftCard, Project } from "../types";
 
 type Ctx = { uid: string };
-
-function labelFor(url: string): string {
-  try {
-    const parsed = new URL(url);
-    const last = parsed.pathname.split("/").filter(Boolean).pop();
-    const stem = (last ?? parsed.hostname).replace(/\.(html?|php|aspx)$/i, "");
-    return stem.replace(/[-_.]+/g, " ").slice(0, 60) || parsed.hostname;
-  } catch {
-    return url.slice(0, 60);
-  }
-}
 
 export function Docs() {
   const { uid } = useOutletContext<Ctx>();
@@ -69,18 +67,80 @@ export function Docs() {
 
   const project = projects.find((entry) => entry.id === projectId);
 
-  function add() {
+  const [chapters, setChapters] = useState<Chapter[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [working, setWorking] = useState("");
+
+  function validUrl(): string | null {
     const trimmed = url.trim();
-    if (!trimmed) return;
     try {
       new URL(trimmed);
+      return trimmed;
     } catch {
       setError("That does not look like a URL.");
-      return;
+      return null;
     }
+  }
+
+  async function ingestOne() {
+    const target = validUrl();
+    if (!target) return;
     setError(null);
-    void addDoc(uid, projectId, trimmed, labelFor(trimmed));
-    setUrl("");
+    setBusy(true);
+    try {
+      await ingestDoc(projectId, target);
+      setUrl("");
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function browse() {
+    const target = validUrl();
+    if (!target) return;
+    setError(null);
+    setBusy(true);
+    setChapters(null);
+    try {
+      const found = await discoverChapters(target);
+      setChapters(found.chapters);
+      setPicked(new Set());
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function ingestPicked() {
+    if (!chapters) return;
+    setBusy(true);
+    setError(null);
+    const chosen = chapters.filter((chapter) => picked.has(chapter.url));
+    let done = 0;
+    try {
+      for (const chapter of chosen) {
+        setWorking(`${done + 1} of ${chosen.length}: ${chapter.title}`);
+        await ingestDoc(projectId, chapter.url, chapter.title);
+        done += 1;
+      }
+      notifications.show({
+        title: "Ingested",
+        message: `${done} page${done === 1 ? "" : "s"} stored. Cards from them cost a fraction of this.`,
+        color: "teal",
+      });
+      setChapters(null);
+      setUrl("");
+    } catch (exc) {
+      setError(
+        `${exc instanceof ApiError ? exc.message : String(exc)} (${done} of ${chosen.length} stored)`,
+      );
+    } finally {
+      setWorking("");
+      setBusy(false);
+    }
   }
 
   function startGenerate(entry: DocLink) {
@@ -96,7 +156,7 @@ export function Docs() {
     setBusy(true);
     setError(null);
     try {
-      setDrafts(await generateDocCards(projectId, [target.url], count, focus));
+      setDrafts(await generateDocCards(projectId, target.id, count, focus));
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : String(exc));
     } finally {
@@ -148,22 +208,37 @@ export function Docs() {
       </Text>
 
       <Card withBorder padding="md" radius="md" mb="lg">
-        <Group gap="sm" align="flex-end" wrap="nowrap">
-          <TextInput
-            style={{ flex: 1 }}
-            label="Documentation URL"
-            placeholder="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/…"
-            value={url}
-            onChange={(event) => setUrl(event.currentTarget.value)}
-            onKeyDown={(event) => event.key === "Enter" && add()}
-          />
-          <Button onClick={add} leftSection={<IconPlus size={16} />}>
-            Add
+        <TextInput
+          label="Documentation URL"
+          placeholder="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/…"
+          value={url}
+          onChange={(event) => setUrl(event.currentTarget.value)}
+          onKeyDown={(event) => event.key === "Enter" && void ingestOne()}
+        />
+        <Group gap="sm" mt="sm">
+          <Button
+            onClick={() => void ingestOne()}
+            loading={busy && !chapters}
+            leftSection={<IconPlus size={16} />}
+          >
+            Add this page
+          </Button>
+          <Button
+            variant="light"
+            onClick={() => void browse()}
+            loading={busy && chapters === null && url.trim().length > 0}
+            leftSection={<IconListSearch size={16} />}
+          >
+            Browse chapters
           </Button>
         </Group>
         <Text size="xs" c="dimmed" mt="xs">
-          A deep link to one topic works far better than a documentation home page — an index
-          gives Claude a list of links to read rather than anything to learn.
+          A page is read <strong>once</strong> and stored. Every batch of cards after that works
+          from the stored copy — no re-reading, so the cards cost a fraction of the first read.
+          <em>Browse chapters</em> reads a contents page and lists what it links to, but it
+          costs about as much as storing several pages and works poorly on sites that build
+          their contents tree in JavaScript — AWS docs among them. Pasting chapter URLs is
+          usually cheaper and more accurate.
         </Text>
         {error && !opened && (
           <Alert color="red" mt="sm" icon={<IconAlertTriangle size={16} />}>
@@ -171,6 +246,60 @@ export function Docs() {
           </Alert>
         )}
       </Card>
+
+      {chapters && (
+        <Card withBorder padding="md" radius="md" mb="lg">
+          <Group justify="space-between" mb="xs">
+            <Text fw={600} size="sm">
+              {chapters.length} chapters found
+            </Text>
+            <Group gap="xs">
+              <Anchor size="xs" onClick={() => setPicked(new Set(chapters.map((c) => c.url)))}>
+                All
+              </Anchor>
+              <Anchor size="xs" onClick={() => setPicked(new Set())}>
+                None
+              </Anchor>
+            </Group>
+          </Group>
+          <ScrollArea h={260} type="auto">
+            <Stack gap={2}>
+              {chapters.map((chapter) => (
+                <Checkbox
+                  key={chapter.url}
+                  label={chapter.title}
+                  checked={picked.has(chapter.url)}
+                  onChange={(event) => {
+                    const next = new Set(picked);
+                    if (event.currentTarget.checked) next.add(chapter.url);
+                    else next.delete(chapter.url);
+                    setPicked(next);
+                  }}
+                  py={4}
+                />
+              ))}
+            </Stack>
+          </ScrollArea>
+          <Group justify="space-between" mt="sm">
+            <Text size="xs" c="dimmed">
+              {working || `${picked.size} selected · each page is read once`}
+            </Text>
+            <Group gap="xs">
+              <Button variant="default" size="xs" onClick={() => setChapters(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="xs"
+                disabled={picked.size === 0}
+                loading={busy}
+                onClick={() => void ingestPicked()}
+              >
+                Store {picked.size} page{picked.size === 1 ? "" : "s"}
+              </Button>
+            </Group>
+          </Group>
+        </Card>
+      )}
 
       {docs === null ? (
         <Group justify="center" py="xl">
@@ -201,6 +330,11 @@ export function Docs() {
                     {entry.cardCount > 0 && (
                       <Badge size="xs" variant="light">
                         {entry.cardCount} card{entry.cardCount === 1 ? "" : "s"}
+                      </Badge>
+                    )}
+                    {entry.approxTokens > 0 && (
+                      <Badge size="xs" variant="default">
+                        ~{Math.round(entry.approxTokens / 1000)}k tokens stored
                       </Badge>
                     )}
                   </Group>
@@ -268,12 +402,11 @@ export function Docs() {
                 loading={busy}
                 leftSection={<IconSparkles size={16} />}
               >
-                {busy ? "Reading the page…" : "Generate"}
+                {busy ? "Writing cards…" : "Generate"}
               </Button>
               <Text size="xs" c="dimmed">
-                Reading the page is what costs — roughly the same whether you ask for 4 cards or
-                12, since the page has to be fetched either way. Asking for more per run is
-                several times cheaper per card than coming back for another batch.
+                This page is already stored, so nothing is fetched. Cards you already have from
+                it are passed along so this batch covers new ground rather than repeating them.
               </Text>
             </>
           ) : (

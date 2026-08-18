@@ -32,13 +32,31 @@ log = logging.getLogger("ig-study.usage")
 MIN_RECORDED_BYTES = 64 * 1024
 
 
+CACHE_WRITE_MULTIPLIER = 1.25
+CACHE_READ_MULTIPLIER = 0.1
+
+
 @dataclass(frozen=True, slots=True)
 class ModelPrice:
-    """USD per million tokens."""
+    """USD per million tokens.
+
+    Cached tokens are billed off the input rate rather than separately: a
+    write costs 1.25x and a read 0.1x. Pricing only the uncached input, as
+    this did before caching was introduced, understates a cache write by
+    around twenty times and shows a cache read as free.
+    """
 
     input_per_mtok: float
     output_per_mtok: float
     note: str = ""
+
+    @property
+    def cache_write_per_mtok(self) -> float:
+        return self.input_per_mtok * CACHE_WRITE_MULTIPLIER
+
+    @property
+    def cache_read_per_mtok(self) -> float:
+        return self.input_per_mtok * CACHE_READ_MULTIPLIER
 
 
 PRICES: dict[str, ModelPrice] = {
@@ -108,6 +126,9 @@ async def record_claude(uid: str, model: str, usage: Any) -> None:
                     "cacheReadTokens": firestore.Increment(
                         int(getattr(usage, "cache_read_input_tokens", 0) or 0)
                     ),
+                    "cacheWriteTokens": firestore.Increment(
+                        int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+                    ),
                 }
             }
         },
@@ -152,19 +173,32 @@ def _price_model(model: str, counts: dict[str, Any]) -> dict[str, Any]:
     price = PRICES.get(model)
     input_tokens = int(counts.get("inputTokens", 0))
     output_tokens = int(counts.get("outputTokens", 0))
-    input_cost = (input_tokens / 1_000_000) * price.input_per_mtok if price else 0.0
-    output_cost = (output_tokens / 1_000_000) * price.output_per_mtok if price else 0.0
+    cache_read = int(counts.get("cacheReadTokens", 0))
+    cache_write = int(counts.get("cacheWriteTokens", 0))
+
+    def usd(tokens: int, rate: float) -> float:
+        return (tokens / 1_000_000) * rate if price else 0.0
+
+    input_cost = usd(input_tokens, price.input_per_mtok if price else 0.0)
+    output_cost = usd(output_tokens, price.output_per_mtok if price else 0.0)
+    write_cost = usd(cache_write, price.cache_write_per_mtok if price else 0.0)
+    read_cost = usd(cache_read, price.cache_read_per_mtok if price else 0.0)
+    total = input_cost + output_cost + write_cost + read_cost
+
     return {
         "model": model,
         "calls": int(counts.get("calls", 0)),
         "inputTokens": input_tokens,
         "outputTokens": output_tokens,
-        "cacheReadTokens": int(counts.get("cacheReadTokens", 0)),
+        "cacheReadTokens": cache_read,
+        "cacheWriteTokens": cache_write,
         "inputUsdPerMTok": price.input_per_mtok if price else None,
         "outputUsdPerMTok": price.output_per_mtok if price else None,
         "inputUsd": round(input_cost, 6),
         "outputUsd": round(output_cost, 6),
-        "totalUsd": round(input_cost + output_cost, 6),
+        "cacheWriteUsd": round(write_cost, 6),
+        "cacheReadUsd": round(read_cost, 6),
+        "totalUsd": round(total, 6),
         "note": price.note if price else "No price on file for this model.",
     }
 
