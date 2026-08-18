@@ -58,7 +58,7 @@ export function Docs() {
 
   const [opened, { open, close }] = useDisclosure(false);
   const [target, setTarget] = useState<DocLink | null>(null);
-  const [count, setCount] = useState(5);
+  const [count, setCount] = useState(10);
   const [focus, setFocus] = useState("");
   const [drafts, setDrafts] = useState<DraftCard[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -251,7 +251,7 @@ export function Docs() {
               <NumberInput
                 label="How many cards"
                 value={count}
-                onChange={(value) => setCount(Number(value) || 5)}
+                onChange={(value) => setCount(Number(value) || 10)}
                 min={1}
                 max={12}
               />
@@ -271,8 +271,9 @@ export function Docs() {
                 {busy ? "Reading the page…" : "Generate"}
               </Button>
               <Text size="xs" c="dimmed">
-                Reading a documentation page costs noticeably more than working from your own
-                notes — a page runs to tens of thousands of tokens. The usage screen shows it.
+                Reading the page is what costs — roughly the same whether you ask for 4 cards or
+                12, since the page has to be fetched either way. Asking for more per run is
+                several times cheaper per card than coming back for another batch.
               </Text>
             </>
           ) : (

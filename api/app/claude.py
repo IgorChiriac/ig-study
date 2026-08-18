@@ -136,13 +136,28 @@ async def generate_cards(
     return parsed
 
 
+BLANK_GRADE = Grade(
+    score=0,
+    verdict="Nothing to grade — the answer was left blank.",
+    missing="",
+    correction="",
+)
+
+
 async def grade_answer(uid: str, question: str, reference: str, student: str) -> Grade:
     """Score a free-text answer on understanding.
 
     Answering in your own words and being judged on understanding rather than
     string matching is the entire reason this isn't just Anki, so the prompt
     is explicit that a 2 does not get rounded up to a 3.
+
+    A blank answer is a zero by definition, so it short-circuits: the model
+    cannot tell you anything the rubric does not already say, and grading is
+    the recurring cost in this app rather than a one-off.
     """
+    if not student.strip():
+        return BLANK_GRADE
+
     response = await client().messages.parse(
         model=GRADE_MODEL,
         max_tokens=1024,
