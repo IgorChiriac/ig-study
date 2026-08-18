@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Card, DocLink, Lecture, Module, Project, Review } from "./types";
+import type { Card, DocLink, GapMap, Lecture, Module, Project, Review } from "./types";
 
 /**
  * Notes, seen flags and resume positions go straight from here to Firestore.
@@ -226,5 +226,29 @@ export function bumpDocCards(uid: string, projectId: string, docId: string, adde
     doc(db, "users", uid, "projects", projectId, "docs", docId),
     { cardCount: increment(added) },
     { merge: true },
+  );
+}
+
+
+export function watchGapMap(
+  uid: string,
+  projectId: string,
+  onChange: (map: GapMap | null) => void,
+) {
+  return onSnapshot(
+    doc(db, "users", uid, "projects", projectId, "analysis", "gaps"),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onChange(null);
+        return;
+      }
+      const data = snapshot.data();
+      onChange({
+        summary: (data.summary as string) ?? "",
+        topics: (data.topics as GapMap["topics"]) ?? [],
+        lectureCount: data.lectureCount as number | undefined,
+        documentCount: data.documentCount as number | undefined,
+      });
+    },
   );
 }

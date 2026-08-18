@@ -6,6 +6,7 @@ import type {
   GradeResult,
 
   Chapter,
+  GapMap,
   ScanResult,
   Usage,
   YouTubePlaylist,
@@ -185,5 +186,12 @@ export function saveDocCards(
   return request<{ saved: number }>("/docs/cards", {
     method: "POST",
     body: JSON.stringify({ projectId, docId, label, cards }),
+  });
+}
+
+export function analyseGaps(projectId: string, topicTarget = 40): Promise<GapMap> {
+  return request<GapMap>(`/gaps/${encodeURIComponent(projectId)}/analyse`, {
+    method: "POST",
+    body: JSON.stringify({ topicTarget }),
   });
 }

@@ -16,6 +16,7 @@ import {
 import {
   IconBook,
   IconChartBar,
+  IconCircleDashed,
   IconChevronLeft,
   IconPlayerPlayFilled,
 } from "@tabler/icons-react";
@@ -146,6 +147,15 @@ export function Course() {
               leftSection={<IconBook size={14} />}
             >
               Docs
+            </Button>
+            <Button
+              component={Link}
+              to={`/c/${projectId}/gaps`}
+              size="compact-xs"
+              variant="light"
+              leftSection={<IconCircleDashed size={14} />}
+            >
+              Coverage
             </Button>
             <Button
               component={Link}

@@ -156,3 +156,19 @@ export type DocLink = {
 };
 
 export type Chapter = { title: string; url: string };
+
+export type GapTopic = {
+  topic: string;
+  sourceSection: string;
+  coverage: "covered" | "partial" | "missing";
+  lectures: string[];
+  importance: "core" | "useful" | "edge";
+  why: string;
+};
+
+export type GapMap = {
+  summary: string;
+  topics: GapTopic[];
+  lectureCount?: number;
+  documentCount?: number;
+};

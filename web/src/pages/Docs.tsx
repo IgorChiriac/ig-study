@@ -32,7 +32,7 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import { Link, useOutletContext, useParams } from "react-router-dom";
+import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
 import {
   ApiError,
@@ -53,6 +53,8 @@ export function Docs() {
   const [docs, setDocs] = useState<DocLink[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [url, setUrl] = useState("");
+  const [params] = useSearchParams();
+  const focusFromGap = params.get("focus") ?? "";
 
   const [opened, { open, close }] = useDisclosure(false);
   const [target, setTarget] = useState<DocLink | null>(null);
@@ -146,7 +148,7 @@ export function Docs() {
   function startGenerate(entry: DocLink) {
     setTarget(entry);
     setDrafts(null);
-    setFocus("");
+    setFocus(focusFromGap);
     setError(null);
     open();
   }
