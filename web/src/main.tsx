@@ -10,6 +10,7 @@ import "./global.css";
 
 import { App } from "./App";
 import { Course } from "./pages/Course";
+import { Docs } from "./pages/Docs";
 import { Lecture } from "./pages/Lecture";
 import { Projects } from "./pages/Projects";
 import { Quiz } from "./pages/Quiz";
@@ -36,6 +37,7 @@ createRoot(document.getElementById("root")!).render(
             <Route path="usage" element={<UsagePage />} />
             <Route path="c/:projectId" element={<Course />} />
             <Route path="c/:projectId/stats" element={<Stats />} />
+            <Route path="c/:projectId/docs" element={<Docs />} />
             <Route path="c/:projectId/:lectureId" element={<Lecture />} />
           </Route>
         </Routes>

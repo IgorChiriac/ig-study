@@ -1,7 +1,9 @@
 import {
   Timestamp,
   collection,
+  deleteDoc,
   doc,
+  increment,
   onSnapshot,
   orderBy,
   query,
@@ -11,7 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Card, Lecture, Module, Project, Review } from "./types";
+import type { Card, DocLink, Lecture, Module, Project, Review } from "./types";
 
 /**
  * Notes, seen flags and resume positions go straight from here to Firestore.
@@ -193,4 +195,39 @@ export function watchRecentReviews(
 
 export function saveGoal(uid: string, projectId: string, goalDate: string | null) {
   return setDoc(doc(db, "users", uid, "projects", projectId), { goalDate }, { merge: true });
+}
+
+
+/** Reference docs are user data, so they are written straight to Firestore. */
+export function watchDocs(uid: string, projectId: string, onChange: (docs: DocLink[]) => void) {
+  return onSnapshot(
+    collection(db, "users", uid, "projects", projectId, "docs"),
+    (snapshot) => {
+      onChange(
+        snapshot.docs.map((entry) => ({
+          id: entry.id,
+          url: (entry.data().url as string) ?? "",
+          label: (entry.data().label as string) ?? "",
+          cardCount: (entry.data().cardCount as number) ?? 0,
+        })),
+      );
+    },
+  );
+}
+
+export function addDoc(uid: string, projectId: string, url: string, label: string) {
+  const reference = doc(collection(db, "users", uid, "projects", projectId, "docs"));
+  return setDoc(reference, { url, label, cardCount: 0 });
+}
+
+export function removeDoc(uid: string, projectId: string, docId: string) {
+  return deleteDoc(doc(db, "users", uid, "projects", projectId, "docs", docId));
+}
+
+export function bumpDocCards(uid: string, projectId: string, docId: string, added: number) {
+  return setDoc(
+    doc(db, "users", uid, "projects", projectId, "docs", docId),
+    { cardCount: increment(added) },
+    { merge: true },
+  );
 }

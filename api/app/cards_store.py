@@ -89,8 +89,14 @@ async def add_cards(
     lecture_id: str,
     module: str,
     pairs: list[tuple[str, str]],
+    doc_id: str = "",
 ) -> list[str]:
-    """Save approved cards. New cards are due immediately."""
+    """Save approved cards. New cards are due immediately.
+
+    A card knows where it came from -- a lecture or a reference doc -- but is
+    otherwise identical either way, which is why the quiz, the scheduler and
+    the stats screen needed no changes to handle doc cards.
+    """
     collection = cards_ref(uid, project_id)
     due = today_local().isoformat()
     batch = client().batch()
@@ -101,6 +107,8 @@ async def add_cards(
             reference,
             {
                 "lectureId": lecture_id,
+                "docId": doc_id,
+                "sourceType": "doc" if doc_id else "lecture",
                 "module": module,
                 "q": question,
                 "a": answer,

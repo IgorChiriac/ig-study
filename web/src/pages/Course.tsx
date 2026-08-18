@@ -13,7 +13,12 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconChartBar, IconChevronLeft, IconPlayerPlayFilled } from "@tabler/icons-react";
+import {
+  IconBook,
+  IconChartBar,
+  IconChevronLeft,
+  IconPlayerPlayFilled,
+} from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 
@@ -133,6 +138,15 @@ export function Course() {
             <Text size="sm" c="dimmed">
               {seen}/{lectures.length}
             </Text>
+            <Button
+              component={Link}
+              to={`/c/${projectId}/docs`}
+              size="compact-xs"
+              variant="light"
+              leftSection={<IconBook size={14} />}
+            >
+              Docs
+            </Button>
             <Button
               component={Link}
               to={`/c/${projectId}/stats`}

@@ -4,6 +4,7 @@ import type {
   DriveFolder,
   DueQueue,
   GradeResult,
+
   ScanResult,
   Usage,
   YouTubePlaylist,
@@ -141,5 +142,29 @@ export function scanYouTube(
   return request(`/youtube/scan/${encodeURIComponent(projectId)}`, {
     method: "POST",
     body: JSON.stringify({ playlistId, name, reverse }),
+  });
+}
+
+export function generateDocCards(
+  projectId: string,
+  urls: string[],
+  count: number,
+  focus: string,
+): Promise<DraftCard[]> {
+  return request<DraftCard[]>("/docs/cards:generate", {
+    method: "POST",
+    body: JSON.stringify({ projectId, urls, count, focus }),
+  });
+}
+
+export function saveDocCards(
+  projectId: string,
+  docId: string,
+  label: string,
+  cards: DraftCard[],
+): Promise<{ saved: number }> {
+  return request<{ saved: number }>("/docs/cards", {
+    method: "POST",
+    body: JSON.stringify({ projectId, docId, label, cards }),
   });
 }

@@ -138,3 +138,10 @@ export type Review = {
   wasNew: boolean;
   answeredAt: Date;
 };
+
+export type DocLink = {
+  id: string;
+  url: string;
+  label: string;
+  cardCount: number;
+};

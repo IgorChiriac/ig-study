@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import drive, youtube
 from app.config import settings
-from app.routers import cards, lectures, projects
+from app.routers import cards, docs, lectures, projects
 from app.routers import drive as drive_router
 from app.routers import usage as usage_router
 from app.routers import youtube as youtube_router
@@ -41,6 +41,7 @@ app.add_middleware(
 
 app.include_router(drive_router.router)
 app.include_router(cards.router)
+app.include_router(docs.router)
 app.include_router(lectures.router)
 app.include_router(projects.router)
 app.include_router(usage_router.router)

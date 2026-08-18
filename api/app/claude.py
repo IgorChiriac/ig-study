@@ -17,6 +17,8 @@ hundred, so a cache_control marker there would silently do nothing.
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from anthropic import AsyncAnthropic
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -44,6 +46,23 @@ class Grade(BaseModel):
     verdict: str = Field(description="One or two sentences, direct and specific.")
     missing: str = Field(description="What the answer left out. Empty if nothing.")
     correction: str = Field(description="The correction. Empty if the answer was right.")
+
+
+def _reject_truncated(response: object, what: str) -> None:
+    """Refuse output that was cut off mid-generation.
+
+    `max_tokens` caps thinking *plus* response text, and Sonnet 5 thinks by
+    default, so a generous-looking budget can still run out partway through the
+    JSON. What comes back then is not an error -- it is a half-written object
+    whose tail the model fills with junk or the word "placeholder". Silently
+    saving those as study cards is far worse than failing.
+    """
+    if getattr(response, "stop_reason", None) == "max_tokens":
+        raise HTTPException(
+            502,
+            f"{what} ran out of room before finishing. Ask for fewer cards, "
+            "or point at a shorter page.",
+        )
 
 
 def client() -> AsyncAnthropic:
@@ -110,6 +129,7 @@ async def generate_cards(
         ],
     )
     await usage_meter.record_claude(uid, CARD_MODEL, response.usage)
+    _reject_truncated(response, "Card generation")
     parsed = response.parsed_output
     if parsed is None:
         raise HTTPException(502, "Card generation returned no parsable output")
@@ -137,7 +157,101 @@ async def grade_answer(uid: str, question: str, reference: str, student: str) ->
         ],
     )
     await usage_meter.record_claude(uid, GRADE_MODEL, response.usage)
+    _reject_truncated(response, "Grading")
     parsed = response.parsed_output
     if parsed is None:
         raise HTTPException(502, "Grading returned no parsable output")
+    return parsed
+
+
+DOC_PROMPT = """You are making study cards for someone working through: {course}
+
+Read these pages:
+{urls}
+{focus}
+Write {n} question/answer cards testing *understanding* of what those pages say.
+
+- Ground every card in what you actually read. If the pages do not cover
+  something, do not write a card about it.
+- Prefer "why" and "when would you" over "what is".
+- Where the pages give a limit, a formula or a number, at least one card must
+  require applying it to a new case rather than restating it.
+- Answers: 1-3 sentences, precise.
+- Nothing about the page's navigation, layout or publication date."""
+
+
+def _domains(urls: list[str]) -> list[str]:
+    """Hosts the fetch is confined to.
+
+    Scoped to the hosts actually supplied, so following a link inside the same
+    documentation site is allowed and wandering off it is not. That keeps the
+    cards on topic as much as it keeps the fetching bounded.
+    """
+    hosts: list[str] = []
+    for url in urls:
+        host = urlparse(url).hostname
+        if host and host not in hosts:
+            hosts.append(host)
+    return hosts
+
+
+async def generate_cards_from_docs(
+    uid: str,
+    course: str,
+    urls: list[str],
+    count: int,
+    focus: str = "",
+) -> Cards:
+    """Draft cards from reference documentation.
+
+    Uses the server-side web_fetch tool, so the pages are retrieved and
+    extracted by Anthropic rather than by us -- no scraper to maintain, and no
+    trouble with documentation sites that render through JavaScript. The tool
+    only fetches URLs already in the conversation, which the prompt supplies.
+
+    This costs meaningfully more than generating from a note: a single
+    documentation page ran to roughly 27k input tokens in testing, against a
+    few hundred for a note. The usage page meters it per model.
+    """
+    if not urls:
+        raise HTTPException(400, "Add at least one documentation link first")
+
+    prompt = DOC_PROMPT.format(
+        course=course,
+        urls="\n".join(f"- {url}" for url in urls),
+        focus=f"\nFocus on: {focus}\n" if focus.strip() else "",
+        n=count,
+    )
+
+    # The budget has to cover thinking as well as the JSON, and a fetched page
+    # makes the model think a lot more than a note does -- 8k truncated mid
+    # object. Above roughly this size the SDK refuses a non-streaming call on
+    # the grounds it might run past ten minutes, so the timeout is raised to
+    # say that is expected. These take well under a minute in practice.
+    response = await client().with_options(timeout=600.0).messages.parse(
+        model=CARD_MODEL,
+        max_tokens=16000,
+        output_format=Cards,
+        output_config={"effort": "medium"},
+        tools=[
+            {
+                "type": "web_fetch_20260209",
+                "name": "web_fetch",
+                "max_uses": max(3, len(urls) + 2),
+                "allowed_domains": _domains(urls),
+                "max_content_tokens": 60000,
+            }
+        ],
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    await usage_meter.record_claude(uid, CARD_MODEL, response.usage)
+    _reject_truncated(response, "Reading those pages")
+    parsed = response.parsed_output
+    if parsed is None:
+        raise HTTPException(
+            502,
+            "Could not read those pages well enough to write cards. "
+            "A deep link to a specific topic works better than an index page.",
+        )
     return parsed
