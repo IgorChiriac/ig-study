@@ -136,7 +136,13 @@ export function Stats() {
   }
 
   const seen = lectures.filter((lecture) => lecture.seen).length;
-  const pct = lectures.length ? Math.round((seen / lectures.length) * 100) : 0;
+  // Held at 99 until the last lecture is actually watched -- rounding would
+  // otherwise show a finished course before it was one.
+  const pct = !lectures.length
+    ? 0
+    : seen === lectures.length
+      ? 100
+      : Math.min(99, Math.round((seen / lectures.length) * 100));
   const remainingS = lectures
     .filter((lecture) => !lecture.seen)
     .reduce((sum, lecture) => sum + (lecture.durationS ?? 0), 0);

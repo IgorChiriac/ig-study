@@ -16,6 +16,7 @@ import {
 import {
   IconBook,
   IconChartBar,
+  IconCircleCheckFilled,
   IconCircleDashed,
   IconChevronLeft,
   IconPlayerPlayFilled,
@@ -37,6 +38,23 @@ type Ctx = { uid: string };
  */
 function valueOf(module: Module, index = 0): string {
   return module.name || `module-${index}`;
+}
+
+function isDone(module: Module): boolean {
+  return module.lectures.length > 0 && module.seenCount === module.lectures.length;
+}
+
+/**
+ * The share watched, as a whole number.
+ *
+ * Rounding alone would report a module of two hundred lectures with one left
+ * as 100%, which is the one number here that has to mean exactly what it says.
+ * Anything unfinished is held at 99.
+ */
+function percentOf(module: Module): number {
+  if (isDone(module)) return 100;
+  if (module.lectures.length === 0) return 0;
+  return Math.min(99, Math.round((module.seenCount / module.lectures.length) * 100));
 }
 
 function formatDuration(seconds: number | null): string {
@@ -105,8 +123,38 @@ export function Course() {
   const [lectures, setLectures] = useState<Lecture[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
 
-  useEffect(() => watchLectures(uid, projectId, setLectures), [uid, projectId]);
+  // Which sections are open, and the course they were opened for. Finished
+  // sections start collapsed, so what is left to watch is what you see.
+  //
+  // Decided once per course rather than derived from progress on every render:
+  // a section that recomputed itself could not be opened to look back at, and
+  // ticking the last lecture would fold the list away under the cursor just as
+  // the next click landed. Finishing a section leaves it open; coming back to
+  // the course is when it is out of the way.
+  const [open, setOpen] = useState<{ projectId: string; values: string[] } | null>(null);
+
+  // Cleared before resubscribing, or moving between courses would leave the
+  // previous course's lectures on screen until the first snapshot arrives --
+  // and would pair them with the new course's id when deciding what to
+  // collapse, which is the one part that would not then correct itself.
+  useEffect(() => {
+    setLectures(null);
+    return watchLectures(uid, projectId, setLectures);
+  }, [uid, projectId]);
   useEffect(() => watchProjects(uid, setProjects), [uid]);
+
+  useEffect(() => {
+    if (lectures === null || open?.projectId === projectId) return;
+    setOpen({
+      projectId,
+      values: groupByModule(lectures)
+        // Numbered before filtering — an unnamed section's value is its
+        // position, and dropping finished ones first would renumber the rest.
+        .map((module, index) => ({ value: valueOf(module, index), done: isDone(module) }))
+        .filter((entry) => !entry.done)
+        .map((entry) => entry.value),
+    });
+  }, [lectures, open, projectId]);
 
   if (lectures === null) {
     return (
@@ -181,20 +229,43 @@ export function Course() {
           />
         </Paper>
       ) : (
-        <Accordion multiple defaultValue={modules.map(valueOf)} variant="separated">
+        <Accordion
+          multiple
+          value={open?.projectId === projectId ? open.values : []}
+          onChange={(values) => setOpen({ projectId, values })}
+          variant="separated"
+        >
           {modules.map((module, index) => (
             <Accordion.Item key={valueOf(module, index)} value={valueOf(module, index)}>
               <Accordion.Control>
-                <Group justify="space-between" pr="sm">
-                  <Text fw={600} size="sm">
-                    {module.name || "Lectures"}
-                  </Text>
-                  <Badge
-                    variant="light"
-                    color={module.seenCount === module.lectures.length ? "teal" : "gray"}
-                  >
-                    {module.seenCount}/{module.lectures.length}
-                  </Badge>
+                <Group justify="space-between" pr="sm" wrap="nowrap" gap="md">
+                  <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
+                    {isDone(module) && (
+                      <IconCircleCheckFilled
+                        size={16}
+                        style={{ color: "var(--mantine-color-teal-5)", flexShrink: 0 }}
+                      />
+                    )}
+                    <Text fw={600} size="sm" truncate>
+                      {module.name || "Lectures"}
+                    </Text>
+                  </Group>
+                  <Group gap="sm" wrap="nowrap">
+                    <Progress
+                      value={percentOf(module)}
+                      w={64}
+                      size="sm"
+                      radius="xl"
+                      color={isDone(module) ? "teal" : "violet"}
+                      visibleFrom="xs"
+                    />
+                    <Text size="xs" ff="monospace" c="dimmed" w={32} ta="right">
+                      {percentOf(module)}%
+                    </Text>
+                    <Badge variant="light" color={isDone(module) ? "teal" : "gray"} w={52}>
+                      {module.seenCount}/{module.lectures.length}
+                    </Badge>
+                  </Group>
                 </Group>
               </Accordion.Control>
               <Accordion.Panel>
