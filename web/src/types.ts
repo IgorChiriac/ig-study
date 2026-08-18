@@ -97,6 +97,13 @@ export type Usage = {
   stream: { bytes: number; requests: number; usdPerGb: number; usd: number };
   scan: { runs: number; lectures: number };
   totalUsd: number;
+  anthropic?: {
+    available: boolean;
+    reason?: string;
+    since?: string;
+    usd?: number;
+    scope?: string;
+  };
   freeTier: Record<string, number>;
   prices: Record<string, { inputUsdPerMTok: number; outputUsdPerMTok: number; note: string }>;
 };

@@ -6,6 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
+from app import billing
 from app import usage as usage_meter
 from app.auth import current_uid
 
@@ -22,4 +23,7 @@ async def month(
     Defaults to the current month in the study timezone, so the figure lines
     up with the day boundary the scheduler uses rather than with UTC.
     """
-    return await usage_meter.summary(uid, month or None)
+    summary = await usage_meter.summary(uid, month or None)
+    if not month or month == usage_meter.current_month():
+        summary["anthropic"] = await billing.month_to_date()
+    return summary

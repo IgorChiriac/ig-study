@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     youtube_api_key: str = ""
+    anthropic_admin_key: str = ""
 
     study_timezone: str = "Europe/Zurich"
     daily_new_cap: int = 30

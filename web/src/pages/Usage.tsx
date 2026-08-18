@@ -272,6 +272,38 @@ export function UsagePage() {
         </Grid.Col>
       </Grid>
 
+      {data.anthropic?.available ? (
+        <Card withBorder padding="lg" radius="md" mt="lg">
+          <Group justify="space-between" mb={4}>
+            <Title order={5}>Billed by Anthropic</Title>
+            <Badge variant="light" color="teal">
+              actual
+            </Badge>
+          </Group>
+          <Group align="baseline" gap="sm">
+            <Text fw={700} size="xl">
+              {money(data.anthropic.usd ?? 0)}
+            </Text>
+            <Text size="sm" c="dimmed">
+              since {data.anthropic.since} · this app metered {money(data.claudeUsd)}
+            </Text>
+          </Group>
+          <Text size="xs" c="dimmed" mt="xs">
+            Organisation-wide, so anything else run under the same Anthropic organisation is
+            included here but not in this app&rsquo;s own figure. A gap between the two is
+            usually that, or a price change this repo&rsquo;s table has not caught up with.
+          </Text>
+        </Card>
+      ) : (
+        <Alert mt="lg" variant="light" color="gray" icon={<IconInfoCircle size={16} />}>
+          <Text size="sm">
+            <strong>Want the real invoice figure?</strong> Add an Anthropic admin key and this
+            shows what Anthropic actually charged, next to what this app calculated.
+            {data.anthropic?.reason ? ` (${data.anthropic.reason})` : ""}
+          </Text>
+        </Alert>
+      )}
+
       <Alert
         mt="lg"
         variant="light"

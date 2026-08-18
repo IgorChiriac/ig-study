@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import drive, youtube
+from app import billing, drive, youtube
 from app.config import settings
 from app.routers import cards, docs, lectures, projects
 from app.routers import drive as drive_router
@@ -27,6 +27,7 @@ async def lifespan(_: FastAPI):
     yield
     await drive.close()
     await youtube.close()
+    await billing.close()
 
 
 app = FastAPI(title="ig-study API", version="0.1.0", lifespan=lifespan)
