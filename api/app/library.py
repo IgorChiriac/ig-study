@@ -52,6 +52,20 @@ class Chapters(BaseModel):
     chapters: list[ChapterLink]
 
 
+def url_key(url: str) -> str:
+    """A URL reduced to what identifies the page.
+
+    A fragment picks a heading within a page already fetched whole, and a
+    trailing slash is the same path written differently. Comparing raw URLs
+    treats those as separate pages, which is how the same chapter got ingested
+    twice under two different anchor texts.
+    """
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/") or "/"
+    query = f"?{parsed.query}" if parsed.query else ""
+    return f"{(parsed.hostname or '').lower()}{path}{query}"
+
+
 def domains_for(urls: list[str]) -> list[str]:
     hosts: list[str] = []
     for url in urls:
@@ -186,7 +200,18 @@ async def discover(uid: str, url: str, limit: int = 40) -> list[ChapterLink]:
     if parsed is None:
         raise HTTPException(502, "Could not read a chapter list from that page")
 
+    # The model reports a link once per anchor, so a page linked from two
+    # places in the prose comes back twice under two different titles. Keeping
+    # the first occurrence preserves the guide's own ordering.
     host = urlparse(url).hostname
-    return [chapter for chapter in parsed.chapters if urlparse(chapter.url).hostname == host][
-        :limit
-    ]
+    seen: set[str] = set()
+    chapters: list[ChapterLink] = []
+    for chapter in parsed.chapters:
+        if urlparse(chapter.url).hostname != host:
+            continue
+        key = url_key(chapter.url)
+        if key in seen:
+            continue
+        seen.add(key)
+        chapters.append(chapter)
+    return chapters[:limit]

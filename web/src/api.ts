@@ -158,10 +158,26 @@ export function ingestDoc(
   projectId: string,
   url: string,
   label = "",
-): Promise<{ docId: string; label: string; chars: number; approxTokens: number }> {
+): Promise<{
+  docId: string;
+  label: string;
+  chars: number;
+  approxTokens: number;
+  outcome: "fetched" | "copied" | "already-added";
+}> {
   return request("/docs/ingest", {
     method: "POST",
     body: JSON.stringify({ projectId, url, label }),
+  });
+}
+
+export function deduplicateDocs(projectId: string): Promise<{
+  removed: number;
+  kept: number;
+}> {
+  return request("/docs/deduplicate", {
+    method: "POST",
+    body: JSON.stringify({ projectId }),
   });
 }
 

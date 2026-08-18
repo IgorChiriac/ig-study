@@ -30,6 +30,12 @@ class DiscoverRequest(BaseModel):
     url: HttpUrl
 
 
+class DeduplicateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    project_id: str = Field(alias="projectId")
+
+
 class IngestRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -70,6 +76,71 @@ async def discover(
     return {"chapters": [{"title": c.title, "url": c.url} for c in chapters]}
 
 
+async def _find_stored(uid: str, project_id: str, url: str) -> tuple[str, str, str] | None:
+    """Locate an earlier ingest of this page. Returns (projectId, docId, label).
+
+    Two questions at once, because the answers differ. Already in *this* course
+    means the entry exists and adding it again should change nothing -- which
+    is what let the same chapter appear twice in the list under two anchor
+    texts. Already in *another* course means the text can be copied across
+    rather than fetched and paid for a second time.
+
+    Scanned rather than queried: the stored `url` is whatever the link said, so
+    matching needs the normalised form, and a course holds tens of documents.
+    """
+    key = library.url_key(url)
+    fallback: tuple[str, str, str] | None = None
+    async for project in (
+        store.client().collection("users").document(uid).collection("projects").stream()
+    ):
+        async for snapshot in _docs_ref(uid, project.id).stream():
+            document = snapshot.to_dict() or {}
+            if library.url_key(str(document.get("url", ""))) != key:
+                continue
+            found = (project.id, snapshot.id, str(document.get("label", "")))
+            if project.id == project_id:
+                return found
+            fallback = fallback or found
+    return fallback
+
+
+async def _stored_text(uid: str, project_id: str, doc_id: str) -> str:
+    body = (
+        await _docs_ref(uid, project_id).document(doc_id).collection("parts").document("body").get()
+    )
+    return str((body.to_dict() or {}).get("text", "")) if body.exists else ""
+
+
+@router.post("/deduplicate")
+async def deduplicate(
+    body: DeduplicateRequest,
+    uid: Annotated[str, Depends(current_uid)],
+) -> dict[str, Any]:
+    """Drop entries that repeat a page already in the course.
+
+    For the ones added before ingest checked. The earliest entry of each page
+    is kept, so any cards already generated stay attached to a document that
+    still exists.
+    """
+    if await store.get_project(uid, body.project_id) is None:
+        raise HTTPException(404, "No such course")
+
+    seen: dict[str, str] = {}
+    removed: list[str] = []
+    docs_ref = _docs_ref(uid, body.project_id)
+    async for snapshot in docs_ref.order_by("ingestedAt").stream():
+        key = library.url_key(str((snapshot.to_dict() or {}).get("url", "")))
+        if key in seen:
+            removed.append(snapshot.id)
+            continue
+        seen[key] = snapshot.id
+
+    for doc_id in removed:
+        await docs_ref.document(doc_id).collection("parts").document("body").delete()
+        await docs_ref.document(doc_id).delete()
+    return {"removed": len(removed), "kept": len(seen)}
+
+
 @router.post("/ingest")
 async def ingest(
     body: IngestRequest,
@@ -84,7 +155,25 @@ async def ingest(
     if await store.get_project(uid, body.project_id) is None:
         raise HTTPException(404, "No such course")
 
-    result = await library.ingest(uid, str(body.url))
+    found = await _find_stored(uid, body.project_id, str(body.url))
+    if found is not None and found[0] == body.project_id:
+        _, doc_id, label = found
+        text = await _stored_text(uid, body.project_id, doc_id)
+        return {
+            "docId": doc_id,
+            "label": label,
+            "chars": len(text),
+            "approxTokens": len(text) // library.CHARS_PER_TOKEN,
+            "outcome": "already-added",
+        }
+
+    if found is not None:
+        other_project, doc_id, label = found
+        text = await _stored_text(uid, other_project, doc_id)
+        result = library.Ingested(url=str(body.url), title=label, text=text)
+    else:
+        result = await library.ingest(uid, str(body.url))
+
     reference = _docs_ref(uid, body.project_id).document()
 
     # Metadata and body are separate documents. The client subscribes to the
@@ -107,6 +196,7 @@ async def ingest(
         "label": body.label or result.title,
         "chars": len(result.text),
         "approxTokens": result.approx_tokens,
+        "outcome": "copied" if found is not None else "fetched",
     }
 
 

@@ -26,16 +26,18 @@ import {
   IconBook,
   IconChevronLeft,
   IconExternalLink,
+  IconCopyOff,
   IconListSearch,
   IconPlus,
   IconSparkles,
   IconTrash,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 
 import {
   ApiError,
+  deduplicateDocs,
   discoverChapters,
   generateDocCards,
   ingestDoc,
@@ -69,6 +71,37 @@ export function Docs() {
 
   const project = projects.find((entry) => entry.id === projectId);
 
+  // Entries added before ingest checked for an existing copy. Counted here
+  // rather than assumed, so the banner only appears when there is something
+  // to clean up.
+  const duplicates = useMemo(() => {
+    if (!docs) return 0;
+    const seen = new Set<string>();
+    let repeats = 0;
+    for (const entry of docs) {
+      const key = entry.url.replace(/#.*$/, "").replace(/\/+$/, "").toLowerCase();
+      if (seen.has(key)) repeats += 1;
+      else seen.add(key);
+    }
+    return repeats;
+  }, [docs]);
+
+  async function dropDuplicates() {
+    setBusy(true);
+    try {
+      const result = await deduplicateDocs(projectId);
+      notifications.show({
+        title: "Cleaned up",
+        message: `${result.removed} duplicate entr${result.removed === 1 ? "y" : "ies"} removed, ${result.kept} page${result.kept === 1 ? "" : "s"} kept.`,
+        color: "teal",
+      });
+    } catch (exc) {
+      setError(exc instanceof ApiError ? exc.message : String(exc));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const [chapters, setChapters] = useState<Chapter[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [working, setWorking] = useState("");
@@ -90,8 +123,18 @@ export function Docs() {
     setError(null);
     setBusy(true);
     try {
-      await ingestDoc(projectId, target);
+      const result = await ingestDoc(projectId, target);
       setUrl("");
+      if (result.outcome !== "fetched") {
+        notifications.show({
+          title: result.outcome === "already-added" ? "Already here" : "Reused",
+          message:
+            result.outcome === "already-added"
+              ? `${result.label} is already in this course — nothing was read or charged.`
+              : `${result.label} was copied from another course, not read again.`,
+          color: "blue",
+        });
+      }
     } catch (exc) {
       setError(exc instanceof ApiError ? exc.message : String(exc));
     } finally {
@@ -123,14 +166,19 @@ export function Docs() {
     const chosen = chapters.filter((chapter) => picked.has(chapter.url));
     let done = 0;
     try {
+      let fetched = 0;
       for (const chapter of chosen) {
         setWorking(`${done + 1} of ${chosen.length}: ${chapter.title}`);
-        await ingestDoc(projectId, chapter.url, chapter.title);
+        const result = await ingestDoc(projectId, chapter.url, chapter.title);
+        if (result.outcome === "fetched") fetched += 1;
         done += 1;
       }
+      const free = done - fetched;
       notifications.show({
-        title: "Ingested",
-        message: `${done} page${done === 1 ? "" : "s"} stored. Cards from them cost a fraction of this.`,
+        title: "Stored",
+        message:
+          `${done} page${done === 1 ? "" : "s"} ready` +
+          (free ? ` · ${free} already stored, so ${free === 1 ? "it was" : "they were"} not read again` : ""),
         color: "teal",
       });
       setChapters(null);
@@ -235,8 +283,9 @@ export function Docs() {
           </Button>
         </Group>
         <Text size="xs" c="dimmed" mt="xs">
-          A page is read <strong>once</strong> and stored. Every batch of cards after that works
-          from the stored copy — no re-reading, so the cards cost a fraction of the first read.
+          A page is read <strong>once, ever</strong>. Cards work from the stored copy; adding a
+          page this course already has changes nothing, and one stored under another course is
+          copied across rather than read again — so neither costs anything.
           <em>Browse chapters</em> reads a contents page and lists what it links to, but it
           costs about as much as storing several pages and works poorly on sites that build
           their contents tree in JavaScript — AWS docs among them. Pasting chapter URLs is
@@ -301,6 +350,31 @@ export function Docs() {
             </Group>
           </Group>
         </Card>
+      )}
+
+      {duplicates > 0 && (
+        <Alert
+          color="orange"
+          variant="light"
+          mb="lg"
+          icon={<IconCopyOff size={16} />}
+          title={`${duplicates} page${duplicates === 1 ? "" : "s"} listed more than once`}
+        >
+          <Text size="sm" mb="sm">
+            Chapter discovery used to report a page once per link to it, so pages linked
+            from two places arrived twice. Removing the repeats keeps the earliest entry,
+            so any cards you have already made stay where they are.
+          </Text>
+          <Button
+            size="xs"
+            variant="light"
+            color="orange"
+            loading={busy}
+            onClick={() => void dropDuplicates()}
+          >
+            Remove {duplicates} duplicate{duplicates === 1 ? "" : "s"}
+          </Button>
+        </Alert>
       )}
 
       {docs === null ? (
