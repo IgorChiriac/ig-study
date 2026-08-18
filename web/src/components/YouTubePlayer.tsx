@@ -4,14 +4,15 @@ import { useEffect, useRef } from "react";
  * A YouTube lecture, played through the IFrame Player API.
  *
  * This is the supported way to embed YouTube, and unlike Drive's iframe player
- * it exposes `getCurrentTime` and `seekTo` — which is the whole reason
- * `decisions.md` §2 rejected an iframe for Drive but embedding is right here.
- * No proxy, no egress, no Range semantics.
+ * it exposes `getCurrentTime` and `seekTo` — which is why `decisions.md` §2
+ * rejected an iframe for Drive but embedding is right here.
  *
- * Position is polled while playing rather than read on unmount, for the same
- * reason the Drive player writes on `pagehide`: locking an iPhone fires no
- * unmount, and a poll that already happened is worth more than a teardown that
- * never runs.
+ * The resume point is read **once**, when the player is built. It must not be
+ * an effect dependency: saving a position makes Firestore echo a new
+ * `positionS` back, and if that rebuilt the player then pausing, seeking or
+ * even switching tabs would tear the video down and start it again. Mount this
+ * with `key={lecture.id}` so a different lecture gets a fresh component, and
+ * therefore a fresh resume point, without the effect ever watching the value.
  */
 
 type YTPlayer = {
@@ -44,7 +45,8 @@ declare global {
   }
 }
 
-const POLL_MS = 5000;
+const POLL_MS = 10_000;
+const MIN_MOVE_S = 5;
 let apiReady: Promise<YTNamespace> | null = null;
 
 function loadApi(): Promise<YTNamespace> {
@@ -75,6 +77,11 @@ export function YouTubePlayer({
 }) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<YTPlayer | null>(null);
+
+  // Initial values only. These deliberately do not track their props.
+  const startAtRef = useRef(startAt);
+  const lastSavedRef = useRef(startAt);
+
   const positionRef = useRef(onPosition);
   const endedRef = useRef(onEnded);
   positionRef.current = onPosition;
@@ -84,9 +91,14 @@ export function YouTubePlayer({
     let cancelled = false;
     let timer: number | undefined;
 
+    // Skip writes that would not move the resume point. Each one costs a
+    // Firestore round trip and a re-render for no gain.
     const flush = () => {
       const seconds = playerRef.current?.getCurrentTime?.() ?? 0;
-      if (seconds > 3) positionRef.current(seconds);
+      if (seconds < 3) return;
+      if (Math.abs(seconds - lastSavedRef.current) < MIN_MOVE_S) return;
+      lastSavedRef.current = seconds;
+      positionRef.current(seconds);
     };
 
     void loadApi().then((YT) => {
@@ -96,7 +108,7 @@ export function YouTubePlayer({
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
         events: {
           onReady: (event) => {
-            if (startAt > 3) event.target.seekTo(startAt, true);
+            if (startAtRef.current > 3) event.target.seekTo(startAtRef.current, true);
           },
           onStateChange: (event) => {
             if (event.data === YT.PlayerState.PLAYING) {
@@ -128,7 +140,7 @@ export function YouTubePlayer({
       playerRef.current?.destroy?.();
       playerRef.current = null;
     };
-  }, [videoId, startAt]);
+  }, [videoId]);
 
   return (
     <div style={{ aspectRatio: "16 / 9", background: "#000" }}>

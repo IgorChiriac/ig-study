@@ -14,16 +14,15 @@ import {
   Title,
 } from "@mantine/core";
 import {
-  IconAlertTriangle,
   IconChevronLeft,
   IconChevronRight,
   IconCircleCheck,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 
-import { ApiError, streamUrl } from "../api";
 import { CardDrafts } from "../components/CardDrafts";
+import { DrivePlayer } from "../components/DrivePlayer";
 import { YouTubePlayer } from "../components/YouTubePlayer";
 import { savePosition, saveNote, setSeen, watchLectures } from "../store";
 import type { Lecture as LectureDoc } from "../types";
@@ -38,13 +37,9 @@ export function Lecture() {
   const navigate = useNavigate();
 
   const [lectures, setLectures] = useState<LectureDoc[] | null>(null);
-  const [src, setSrc] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(true);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const resumedRef = useRef(false);
   const noteLoadedRef = useRef(false);
 
   useEffect(() => watchLectures(uid, projectId, setLectures), [uid, projectId]);
@@ -54,27 +49,6 @@ export function Lecture() {
   const previous = index > 0 ? lectures?.[index - 1] : undefined;
   const next = index >= 0 && lectures ? lectures[index + 1] : undefined;
 
-  const isYouTube = lecture?.source === "youtube";
-
-  useEffect(() => {
-    resumedRef.current = false;
-    noteLoadedRef.current = false;
-    setSrc(null);
-    setError(null);
-    if (lectures === null || isYouTube) return;
-
-    let live = true;
-    streamUrl(lectureId)
-      .then((result) => live && setSrc(result.url))
-      .catch(
-        (exc: unknown) =>
-          live && setError(exc instanceof ApiError ? exc.message : String(exc)),
-      );
-    return () => {
-      live = false;
-    };
-  }, [lectureId, lectures, isYouTube]);
-
   useEffect(() => {
     if (lecture && !noteLoadedRef.current) {
       noteLoadedRef.current = true;
@@ -82,9 +56,14 @@ export function Lecture() {
     }
   }, [lecture]);
 
+  // Depends on the note text, not the whole lecture. Watching the document
+  // would restart the debounce every time anything else on it changed — a
+  // position write, a seen flag — for a value that had not moved.
+  const savedNote = lecture?.note;
+
   useEffect(() => {
     if (!noteLoadedRef.current) return;
-    if (lecture && note === lecture.note) {
+    if (note === savedNote) {
       setSaved(true);
       return;
     }
@@ -93,33 +72,8 @@ export function Lecture() {
       void saveNote(uid, projectId, lectureId, note).then(() => setSaved(true));
     }, NOTE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [note, lecture, uid, projectId, lectureId]);
+  }, [note, savedNote, uid, projectId, lectureId]);
 
-  const flushPosition = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || video.currentTime < 3) return;
-    void savePosition(uid, projectId, lectureId, video.currentTime);
-  }, [uid, projectId, lectureId]);
-
-  /**
-   * Resume is what makes phone-then-laptop actually work, so it has to survive
-   * the ways a mobile session really ends. On iOS, switching apps or locking
-   * the screen fires neither `unload` nor a React unmount -- `pagehide` and
-   * `visibilitychange` are the events that do fire.
-   */
-  useEffect(() => {
-    const onHide = () => flushPosition();
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") flushPosition();
-    };
-    window.addEventListener("pagehide", onHide);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("pagehide", onHide);
-      document.removeEventListener("visibilitychange", onVisibility);
-      flushPosition();
-    };
-  }, [flushPosition]);
 
   if (lectures === null) {
     return (
@@ -156,12 +110,9 @@ export function Lecture() {
         <Grid.Col span={{ base: 12, md: 7 }}>
           <Stack gap="sm">
             <Paper withBorder radius="md" style={{ overflow: "hidden" }}>
-              {error ? (
-                <Alert color="red" icon={<IconAlertTriangle size={16} />} radius={0}>
-                  {error}
-                </Alert>
-              ) : lecture.source === "youtube" && lecture.youtubeVideoId ? (
+              {lecture.source === "youtube" && lecture.youtubeVideoId ? (
                 <YouTubePlayer
+                  key={lecture.id}
                   videoId={lecture.youtubeVideoId}
                   startAt={lecture.positionS}
                   onPosition={(seconds) =>
@@ -171,29 +122,18 @@ export function Lecture() {
                     if (!lecture.seen) void setSeen(uid, projectId, lectureId, true);
                   }}
                 />
-              ) : src ? (
-                <video
-                  ref={videoRef}
-                  src={src}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  onLoadedMetadata={(event) => {
-                    if (resumedRef.current) return;
-                    resumedRef.current = true;
-                    if (lecture.positionS > 3) {
-                      event.currentTarget.currentTime = lecture.positionS;
-                    }
-                  }}
-                  onPause={flushPosition}
+              ) : (
+                <DrivePlayer
+                  key={lecture.id}
+                  lectureId={lectureId}
+                  startAt={lecture.positionS}
+                  onPosition={(seconds) =>
+                    void savePosition(uid, projectId, lectureId, seconds)
+                  }
                   onEnded={() => {
                     if (!lecture.seen) void setSeen(uid, projectId, lectureId, true);
                   }}
                 />
-              ) : (
-                <Group justify="center" py="xl">
-                  <Loader size="sm" />
-                </Group>
               )}
             </Paper>
 
