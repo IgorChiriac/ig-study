@@ -67,11 +67,13 @@ function loadApi(): Promise<YTNamespace> {
 export function YouTubePlayer({
   videoId,
   startAt,
+  autoPlay = false,
   onPosition,
   onEnded,
 }: {
   videoId: string;
   startAt: number;
+  autoPlay?: boolean;
   onPosition: (seconds: number) => void;
   onEnded: () => void;
 }) {
@@ -81,6 +83,7 @@ export function YouTubePlayer({
   // Initial values only. These deliberately do not track their props.
   const startAtRef = useRef(startAt);
   const lastSavedRef = useRef(startAt);
+  const autoPlayRef = useRef(autoPlay);
 
   const positionRef = useRef(onPosition);
   const endedRef = useRef(onEnded);
@@ -105,7 +108,17 @@ export function YouTubePlayer({
       if (cancelled || !mountRef.current) return;
       playerRef.current = new YT.Player(mountRef.current, {
         videoId,
-        playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+        playerVars: {
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+          // Auto-advance only. YouTube honours this on desktop; on iOS it is
+          // subject to the same gesture rules as any other video, so the
+          // player may simply sit there showing its own play button. That is
+          // an acceptable outcome — the iframe is cross-origin, so unlike the
+          // Drive player we cannot detect the block and offer our own.
+          autoplay: autoPlayRef.current ? 1 : 0,
+        },
         events: {
           onReady: (event) => {
             if (startAtRef.current > 3) event.target.seekTo(startAtRef.current, true);

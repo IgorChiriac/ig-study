@@ -42,6 +42,54 @@ Without it, every play goes fullscreen on iPhone. Kills any side-by-side player-
 <video controls playsinline src="…/stream.mp4"></video>
 ```
 
+### iPhone has no element fullscreen — only `<video>` has
+
+`Element.requestFullscreen` and `webkitRequestFullscreen` are **both undefined**
+on iPhone. Not prefixed, not partial — absent. (iPad has them; iPhone does not.)
+The only thing that can go fullscreen there is a video element, via the
+non-standard `HTMLVideoElement.webkitEnterFullscreen()`.
+
+So a "fullscreen the player and the notes together" control cannot exist on the
+phone. Feature-detect and branch, rather than calling `requestFullscreen()` and
+getting a button that silently does nothing:
+
+```ts
+if (supportsElementFullscreen()) stage.requestFullscreen();
+else video.webkitEnterFullscreen();      // iPhone: native player, no notes
+```
+
+Two further traps on the WebKit path:
+
+- **`webkitEnterFullscreen()` is a no-op before metadata loads** (`readyState < 1`),
+  which is exactly when someone taps the button on a cold page. Wait for
+  `loadedmetadata` and call it once.
+- **It does not set `document.fullscreenElement`**, and fires
+  `webkitbeginfullscreen` / `webkitendfullscreen` on the video rather than
+  `fullscreenchange` on the document. Any "am I fullscreen?" state derived the
+  standard way stays `false` throughout.
+
+The YouTube iframe is cross-origin, so none of this is reachable for it — its own
+control is the only way in on a phone. Disable the app's button there instead of
+offering one that does nothing.
+
+### Autoplaying the next video is blocked, and the block is a rejected promise
+
+Auto-advance crosses a route change and an async stream-URL fetch, which breaks
+the user-gesture chain. Blink usually allows the resulting `play()` anyway;
+WebKit usually doesn't.
+
+`video.play()` returns a promise that **rejects** — it does not throw, and there
+is no event. Ignore it and the page shows a loaded, paused, silent video with no
+indication anything went wrong:
+
+```ts
+void video.play().catch(() => setAutoplayBlocked(true));   // offer a tap
+```
+
+Treat the rejection as the normal outcome on the phone, not an error. The
+cross-origin YouTube iframe gives you no signal at all, so there the player just
+sits showing its own play button.
+
 ### H.265 splits your two engines
 
 WebKit plays HEVC happily. Desktop Chrome's support is hardware-dependent. So an H.265 file works on the phone and fails on the laptop — the confusing direction, because you'll assume the phone is the fragile one.

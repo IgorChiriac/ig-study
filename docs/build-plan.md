@@ -303,7 +303,7 @@ Daily caps of 30 new and 60 reviews, so it never becomes a wall you skip. A card
 | 1 | **Sign in** | Google button. That's it |
 | 2 | **Projects** | Course cards with progress rings · *Add project* → Drive folder picker → scan |
 | 3 | **Course** | Modules as collapsible sections, seen checkbox per lecture, progress bar, "12 due" badge |
-| 4 | **Lecture** | Player left, markdown note editor right (stacked on mobile) · *Mark seen* · *Generate cards* |
+| 4 | **Lecture** | Player left, markdown note editor right (stacked on mobile) · *Mark seen* · *Generate cards* · *Fullscreen* the whole stage · optional *Auto-play next* |
 | 5 | **Quiz** | Due card, free-text answer box, Claude's grade + correction, next |
 | 6 | **Stats** | Reviews over time, weakest modules, leeches |
 
