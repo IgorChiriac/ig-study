@@ -68,11 +68,23 @@ python tools/get_refresh_token.py                  # one-time Drive consent
 python tools/prepare_upload.py <course> -o <out>   # faststart + codec check
 python tools/smoke_test.py --folder <driveId>      # end-to-end check
 
-# deploy
+# deploy — api (manual)
 gcloud run deploy ig-study-api --source api/ --region europe-west1 \
   --allow-unauthenticated --timeout 3600 --concurrency 4
+
+# deploy — web (automatic on push to main; this is the manual fallback)
+cd web && npm run build && cd ..   # firebase deploy does NOT build
 firebase deploy --only hosting
 ```
+
+**Hosting deploys itself.** `.github/workflows/deploy-web.yml` builds `web/` and
+deploys to Firebase Hosting on every push to `main` that touches `web/` or
+`firebase.json`. It needs these repository secrets: `FIREBASE_SERVICE_ACCOUNT`
+(a JSON key for a service account with the Firebase Hosting Admin and API Keys
+Viewer roles) plus the seven `VITE_*` values from `web/.env.example`.
+
+The API is not automated — it changes rarely, and a second set of GCP
+credentials in the repo would buy little.
 
 ## Working notes
 

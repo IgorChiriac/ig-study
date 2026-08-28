@@ -1,0 +1,68 @@
+# Build web/ and deploy it to Firebase Hosting.
+#
+# Hosting serves `web/dist` (see firebase.json), and `firebase deploy` does not
+# build — so the build has to happen here, before the deploy, or the previous
+# bundle is simply re-uploaded.
+#
+# Only the SPA is deployed. The FastAPI service stays a manual
+# `gcloud run deploy`: it changes rarely, and automating it would mean putting
+# a second set of GCP credentials in this repo for very little gain.
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "firebase.json"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+# A second push while a deploy is in flight should supersede it, not race it.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        working-directory: web
+        run: npm ci
+
+      # `npm run build` is `tsc -b && vite build`, so a type error fails the
+      # deploy rather than shipping. No separate typecheck step needed.
+      #
+      # Vite gives real environment variables priority over .env files, so the
+      # VITE_* values can be passed straight in. They are public by design —
+      # they ship inside the bundle — but they live in secrets so this public
+      # repo doesn't hand the API key to quota scrapers, which is the same
+      # reason web/.env.local is gitignored.
+      - name: Build
+        working-directory: web
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: npm run build
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ig-study
+          channelId: live
