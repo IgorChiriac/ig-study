@@ -1,6 +1,6 @@
-import { Alert, Group, Loader } from "@mantine/core";
-import { IconAlertTriangle } from "@tabler/icons-react";
-import { useEffect, useRef, useState } from "react";
+import { Alert, Box, Button, Group, Loader } from "@mantine/core";
+import { IconAlertTriangle, IconPlayerPlayFilled } from "@tabler/icons-react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 
 import { ApiError, streamUrl } from "../api";
 
@@ -19,29 +19,70 @@ import { ApiError, streamUrl } from "../api";
 
 const MIN_MOVE_S = 5;
 
+export type DrivePlayerHandle = {
+  /**
+   * Put the video element itself fullscreen, the only kind of fullscreen an
+   * iPhone has. Returns false when the engine doesn't offer it, so the caller
+   * can fall back to element fullscreen instead of leaving a dead button.
+   */
+  enterNativeFullscreen: () => boolean;
+};
+
+type WebKitVideo = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitSupportsFullscreen?: boolean;
+};
+
 export function DrivePlayer({
   lectureId,
   startAt,
+  autoPlay = false,
   onPosition,
   onEnded,
+  ref,
 }: {
   lectureId: string;
   startAt: number;
+  autoPlay?: boolean;
   onPosition: (seconds: number) => void;
   onEnded: () => void;
+  ref?: Ref<DrivePlayerHandle>;
 }) {
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const resumedRef = useRef(false);
   const startAtRef = useRef(startAt);
   const lastSavedRef = useRef(startAt);
+  // Read once. Auto-advance sets it via router state, and that state survives
+  // a re-render — tracking the prop would re-arm autoplay on every snapshot.
+  const autoPlayRef = useRef(autoPlay);
 
   const positionRef = useRef(onPosition);
   const endedRef = useRef(onEnded);
   positionRef.current = onPosition;
   endedRef.current = onEnded;
+
+  useImperativeHandle(ref, () => ({
+    enterNativeFullscreen: () => {
+      const video = videoRef.current as WebKitVideo | null;
+      if (!video?.webkitEnterFullscreen) return false;
+      // webkitEnterFullscreen is a no-op before metadata has loaded, which is
+      // exactly when someone taps the button on a cold page.
+      if (video.readyState >= 1) {
+        video.webkitEnterFullscreen();
+      } else {
+        video.addEventListener(
+          "loadedmetadata",
+          () => (video as WebKitVideo).webkitEnterFullscreen?.(),
+          { once: true },
+        );
+      }
+      return true;
+    },
+  }), []);
 
   useEffect(() => {
     let live = true;
@@ -98,25 +139,53 @@ export function DrivePlayer({
   }
 
   return (
-    <video
-      ref={videoRef}
-      src={src}
-      controls
-      playsInline
-      preload="metadata"
-      onLoadedMetadata={(event) => {
-        if (resumedRef.current) return;
-        resumedRef.current = true;
-        if (startAtRef.current > 3) event.currentTarget.currentTime = startAtRef.current;
-      }}
-      onPause={() => {
-        const seconds = videoRef.current?.currentTime ?? 0;
-        if (seconds >= 3) {
-          lastSavedRef.current = seconds;
-          positionRef.current(seconds);
-        }
-      }}
-      onEnded={() => endedRef.current()}
-    />
+    <Box pos="relative">
+      <video
+        ref={videoRef}
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        onLoadedMetadata={(event) => {
+          const video = event.currentTarget;
+          if (resumedRef.current) return;
+          resumedRef.current = true;
+          if (startAtRef.current > 3) video.currentTime = startAtRef.current;
+          if (!autoPlayRef.current) return;
+          // Auto-advance crosses a route change and an async stream-URL fetch,
+          // which breaks the user-gesture chain. Blink usually allows it
+          // anyway; WebKit usually doesn't. A rejected promise is the normal
+          // outcome, not an error — offer the tap instead of dying silently.
+          void video.play().catch(() => setAutoplayBlocked(true));
+        }}
+        onPlay={() => setAutoplayBlocked(false)}
+        onPause={() => {
+          const seconds = videoRef.current?.currentTime ?? 0;
+          if (seconds >= 3) {
+            lastSavedRef.current = seconds;
+            positionRef.current(seconds);
+          }
+        }}
+        onEnded={() => endedRef.current()}
+      />
+
+      {autoplayBlocked && (
+        <Group
+          justify="center"
+          pos="absolute"
+          inset={0}
+          style={{ background: "rgba(0,0,0,.45)", pointerEvents: "none" }}
+        >
+          <Button
+            size="md"
+            leftSection={<IconPlayerPlayFilled size={18} />}
+            style={{ pointerEvents: "auto" }}
+            onClick={() => void videoRef.current?.play().catch(() => undefined)}
+          >
+            Play
+          </Button>
+        </Group>
+      )}
+    </Box>
   );
 }

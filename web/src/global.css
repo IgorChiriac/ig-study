@@ -33,3 +33,14 @@ video {
 .lecture-row[data-active="true"] {
   background-color: var(--mantine-color-dark-5);
 }
+
+/* The lecture stage is what goes fullscreen on desktop: player *and* note
+   editor, so the watch-and-write loop survives the transition. A fullscreen
+   element gets a transparent black backdrop by default, so the app background
+   and padding have to be restated here or the notes land on bare black. */
+.lecture-stage:fullscreen,
+.lecture-stage:-webkit-full-screen {
+  background: var(--mantine-color-body);
+  overflow-y: auto;
+  padding: var(--mantine-spacing-md);
+}
