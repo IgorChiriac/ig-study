@@ -23,20 +23,26 @@ concurrency:
   group: deploy-web
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    defaults:
+      run:
+        working-directory: web
 
-      - uses: actions/setup-node@v4
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
 
       - name: Install
-        working-directory: web
         run: npm ci
 
       # `npm run build` is `tsc -b && vite build`, so a type error fails the
@@ -48,7 +54,6 @@ jobs:
       # repo doesn't hand the API key to quota scrapers, which is the same
       # reason web/.env.local is gitignored.
       - name: Build
-        working-directory: web
         env:
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
